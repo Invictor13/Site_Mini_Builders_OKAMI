@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mestre de Obras 3D — Simulador ArchViz & Protetor de Tela</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body class="text-slate-200">
+
+    <!-- Container WebGL 100vw x 100dvh -->
+    <div id="canvas-container" class="relative w-full h-full overflow-hidden"></div>
+
+    <!-- Botão discreto para sair do Modo Zen (aparece apenas quando Zen ativo) -->
+    <button id="zen-exit-pill" onclick="toggleZenMode(false)" class="hidden fixed safe-bottom right-3 sm:right-4 z-50 dock-surface px-3 py-1.5 rounded-full text-[11px] font-medium text-slate-300 hover:text-white transition">
+        👁️ Sair do Modo Zen (H)
+    </button>
+
+    <!-- HEADER RESPONSIVO (Empilha limpo no celular vertical, cantos opostos no monitor horizontal) -->
+    <header class="hud-hideable fixed top-0 inset-x-0 z-20 safe-top px-2 sm:px-4 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-1.5 pointer-events-none">
+
+        <!-- Seletor de Contratos + Fase Atual -->
+        <div class="flex flex-col items-start gap-1.5 max-w-full">
+            <div class="pointer-events-auto dock-surface dock-scroll rounded-xl p-1 flex items-center gap-1 max-w-[96vw]">
+                <button data-mode-btn="house" data-keep-active="true" onclick="switchMode('house')" class="tool-btn active px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🏠 Casa</button>
+                <button data-mode-btn="bridge" data-keep-active="true" onclick="switchMode('bridge')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🌉 Ponte</button>
+                <button data-mode-btn="building" data-keep-active="true" onclick="switchMode('building')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🏢 Prédio</button>
+                <button data-mode-btn="tower" data-keep-active="true" onclick="switchMode('tower')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🗼 Torre</button>
+            </div>
+            <div class="dock-surface rounded-xl px-3 py-1.5 flex items-center gap-2 max-w-[96vw]">
+                <span id="phase-dot" class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                <span id="phase-indicator" class="text-[10px] font-semibold tracking-wider uppercase text-slate-200 truncate">
+                    CASA · FASE 0 · CAPINA & TERRAPLANAGEM
+                </span>
+            </div>
+        </div>
+
+        <!-- Protetor de Tela, Clima, Bioma, Risco, Zen, Dia/Noite, Áudio & Ferramentas -->
+        <div class="pointer-events-auto dock-surface dock-scroll rounded-xl p-1 flex items-center gap-1 max-w-[96vw] self-start lg:self-auto">
+            <button id="btn-screensaver" onclick="toggleScreensaverMode()" class="tool-btn flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-emerald-300" title="Modo Protetor de Tela Relaxante (Autopilot 100%)">
+                <span>🌙</span><span id="screensaver-btn-label">Modo Relax</span>
+            </button>
+            <button id="btn-playlist" onclick="togglePlaylistMode()" class="tool-btn active px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Playlist Automática entre Obras no Modo Relax">
+                <span>🔁</span>
+            </button>
+            <button id="btn-risk-profile" data-keep-active="true" onclick="toggleRiskProfile()" class="tool-btn active px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-amber-200" title="Perfil: Realista (imprevistos e risco de falha) vs Calmo">
+                ⚡ Realista
+            </button>
+            <button id="btn-camp-shift" data-keep-active="true" onclick="toggleCampNightMode()" class="tool-btn active px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-200" title="Turno Noturno: Revezamento com Refletores vs Todos Dormem à Noite">
+                🔄 Turno
+            </button>
+            <button id="btn-zen" onclick="toggleZenMode(true)" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Modo Zen / Ocultar HUD (Tecla H)">
+                <span>📺</span>
+            </button>
+            <button id="btn-daynight" onclick="toggleDayNightStep()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Dia / Noite">
+                <span>☀️</span>
+            </button>
+            <button id="btn-weather" onclick="cycleWeatherManual()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Clima (Limpo / Chuva / Vento)">
+                <span>🌤️</span>
+            </button>
+            <button id="btn-biome" onclick="cycleBiomeManual()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Trocar Bioma (Floresta / Litoral / Cerrado / Montanha)">
+                <span>🌍</span>
+            </button>
+            <button id="btn-ambient" data-keep-active="true" onclick="toggleAmbientMute()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Ativar/Desativar Som Ambiente ASMR (Vento, Rio, Noite)">
+                <span>🌿</span>
+            </button>
+            <button id="btn-mute" onclick="toggleAudioMute()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Silenciar / Ativar Efeitos da Obra">
+                <span>🔊</span>
+            </button>
+            <div class="w-px h-4 bg-white/10 shrink-0"></div>
+            <button id="btn-hire-worker" onclick="hireMiniWorker()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Contratar Mini Ajudante Autônomo">
+                <span>👷</span><span id="worker-btn-label">Ajudante (0/3)</span>
+            </button>
+            <button id="btn-xray" onclick="toggleXRayMode()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Modo Raio-X (Ver Instalações)">
+                <span>👁️</span><span>Raio-X</span>
+            </button>
+            <button id="tool-erase" onclick="selectTool('erase')" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Apagar / Demolir">
+                <span>🗑️</span>
+            </button>
+            <button id="btn-new-terrain" onclick="regenerateNewTerrain()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-300" title="Gerar Novo Terreno Procedural">
+                <span>🎲</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Selo de Laudo Técnico (Aprovado / Falha Estrutural) -->
+    <div id="laudo-badge" class="hidden"></div>
+
+    <!-- Notificação Flutuante Sutil (Ajustada abaixo do header em celulares verticais e monitores) -->
+    <div id="toast-box" class="hud-hideable fixed top-32 lg:top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-none transition-all duration-300 opacity-0 transform -translate-y-2 max-w-[94vw]">
+        <div class="dock-surface px-3.5 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-xs font-medium text-amber-200 flex items-center gap-2 max-w-full">
+            <span id="toast-icon" class="shrink-0">📐</span>
+            <span id="toast-message" class="truncate">Pronto para iniciar a obra</span>
+        </div>
+    </div>
+
+    <!-- DOCK ÚNICO CONTEXTUAL POR MODO E FASE (Deslizável no celular, centralizado no desktop) -->
+    <footer class="hud-hideable fixed safe-bottom left-1/2 -translate-x-1/2 dock-surface dock-scroll rounded-2xl px-2 py-1.5 z-20 max-w-[96vw]">
+
+        <!-- ==================== MODO CASA ==================== -->
+        <div data-mode-dock="house" data-phase-dock="0" class="flex items-center gap-1">
+            <button data-tool-id="clear-weeds" onclick="selectTool('clear-weeds')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🌿 1. Capinar Lote</button>
+            <button data-tool-id="level" onclick="selectTool('level')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🚜 2. Terraplanar</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <span data-weeds-pill="house" class="text-[11px] text-emerald-300 px-1.5 font-medium">🌿 Mato: 0 rest.</span>
+            <span data-level-pill="house" class="text-[11px] text-amber-300 px-1.5 font-medium">📐 Platô: 0%</span>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <button onclick="hireMiniWorker()" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium text-amber-300">👷 Chamar Ajudante</button>
+            <button onclick="advanceToPhase1()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold tracking-wide transition whitespace-nowrap">
+                Planta & Marcação →
+            </button>
+        </div>
+
+        <div data-mode-dock="house" data-phase-dock="1" class="hidden flex items-center gap-1">
+            <button id="tool-level-1" data-tool-id="level" onclick="selectTool('level')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Nivelar</button>
+            <button id="tool-room" onclick="selectTool('room')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Cômodo</button>
+            <button id="tool-door" onclick="selectTool('door')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Porta</button>
+            <button id="tool-window" onclick="selectTool('window')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Janela</button>
+            <button id="tool-muro" onclick="selectTool('muro')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Muro</button>
+            <button id="tool-stair" onclick="selectTool('stair')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Escada</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <button onclick="loadPresetHouse()" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium text-sky-300">✨ Modelo</button>
+            <button onclick="advanceToPhase2()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold tracking-wide transition whitespace-nowrap">
+                Iniciar Fundação →
+            </button>
+        </div>
+
+        <div data-mode-dock="house" data-phase-dock="2" class="hidden flex items-center gap-1">
+            <button id="tool-dig" onclick="selectTool('dig')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Cavar</button>
+            <button id="tool-rebar" onclick="selectTool('rebar')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Armaduras</button>
+            <button id="tool-formwork" onclick="selectTool('formwork')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">3. Caixaria</button>
+            <button id="tool-mixer" onclick="selectTool('mixer')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">4. Masseira</button>
+            <button id="tool-pour-col" onclick="selectTool('pour-col')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">5. Concretar</button>
+
+            <div id="sub-rebar" class="hidden flex items-center pl-1.5 ml-1 border-l border-white/10">
+                <button onclick="spawnFallingRebars()" class="px-2.5 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-white text-[11px] font-semibold">+ Pedir Ferros</button>
+            </div>
+            <div id="sub-mixer" class="hidden flex items-center gap-2 pl-2 ml-1 border-l border-white/10 text-[11px] text-slate-300">
+                <span>Areia <b id="cnt-sand" class="text-amber-300">0/3</b></span>
+                <span>Cim <b id="cnt-cement" class="text-white">0/1</b></span>
+                <span>Água <b id="cnt-water" class="text-sky-300">0/1</b></span>
+                <span>Mix <b id="cnt-mix" class="text-emerald-400">0%</b></span>
+                <button onclick="restockSupplies()" class="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-medium text-white">Repor</button>
+            </div>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <span id="bucket-pill-2" class="text-[11px] text-slate-400 px-1.5">🪣 0/4</span>
+            <button onclick="advanceToPhase3()" class="ml-1 px-3 py-1.5 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Alvenaria →
+            </button>
+        </div>
+
+        <div data-mode-dock="house" data-phase-dock="3" class="hidden flex items-center gap-1">
+            <button id="tool-prop" onclick="selectTool('prop')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium text-amber-300">Escora Vão</button>
+            <button id="tool-wall" onclick="selectTool('wall')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Paredes</button>
+            <button id="tool-floor" onclick="selectTool('floor')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Contrapiso</button>
+            <button id="tool-mixer-3" onclick="selectTool('mixer')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">Masseira</button>
+            <div class="w-px h-5 bg-white/10 mx-0.5"></div>
+            <button id="brick-standard" data-keep-active="true" onclick="setBrickType('standard')" class="tool-btn active px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium">Baiano</button>
+            <button id="brick-block" data-keep-active="true" onclick="setBrickType('block')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium">Bloco</button>
+            <button onclick="spawnBrickPallet()" class="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-medium text-white">+ Palete</button>
+            <button onclick="restockSupplies()" class="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-medium text-slate-300">+ Sacos</button>
+            <span id="bucket-pill-3" class="text-[11px] text-slate-400 px-1">🪣 0/4</span>
+            <button onclick="advanceToPhase4()" class="ml-1 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Instalações →
+            </button>
+        </div>
+
+        <div data-mode-dock="house" data-phase-dock="4" class="hidden flex items-center gap-1">
+            <button id="tool-elec" onclick="selectTool('elec')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">⚡ Elétrica</button>
+            <button onclick="testElectricalSystem()" class="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/50 text-amber-200 text-xs font-semibold transition">
+                ⚡ Testar Energia
+            </button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <button id="tool-plumb" onclick="selectTool('plumb')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">💧 Hidráulica</button>
+            <button onclick="testPlumbingSystem()" class="px-2.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/35 border border-sky-500/50 text-sky-200 text-xs font-semibold transition">
+                💧 Abrir Registro
+            </button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <button onclick="advanceToPhase5()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Acabamento →
+            </button>
+        </div>
+
+        <div data-mode-dock="house" data-phase-dock="5" class="hidden flex items-center gap-1">
+            <button id="tool-beam-fw" onclick="selectTool('beam-fw')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🪵 1. Caixaria Cinta</button>
+            <button id="tool-beam" onclick="selectTool('beam')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🪣 2. Concretar Cinta</button>
+            <button id="tool-roof" onclick="selectTool('roof')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🏠 3. Telhado</button>
+            <button id="tool-plaster" onclick="selectTool('plaster')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">4. Reboco</button>
+            <button id="tool-fixtures" onclick="selectTool('fixtures')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">5. Esquadrias</button>
+            <button id="tool-paint" onclick="selectTool('paint')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">6. Pintura</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <div class="flex items-center gap-1.5 px-1">
+                <button onclick="setPaintColor('#f1f5f9', this)" class="swatch-btn active w-4 h-4 rounded-full border border-white/40" style="background:#f1f5f9" title="Branco Neve"></button>
+                <button onclick="setPaintColor('#dfd3be', this)" class="swatch-btn w-4 h-4 rounded-full border border-white/40" style="background:#dfd3be" title="Areia Quente"></button>
+                <button onclick="setPaintColor('#94a3b8', this)" class="swatch-btn w-4 h-4 rounded-full border border-white/40" style="background:#94a3b8" title="Cinza Arquitetônico"></button>
+                <button onclick="setPaintColor('#c9866b', this)" class="swatch-btn w-4 h-4 rounded-full border border-white/40" style="background:#c9866b" title="Terracota Suave"></button>
+                <button onclick="setPaintColor('#8fa893', this)" class="swatch-btn w-4 h-4 rounded-full border border-white/40" style="background:#8fa893" title="Verde Sálvia"></button>
+            </div>
+        </div>
+
+        <!-- ==================== MODO PONTE ==================== -->
+        <div data-mode-dock="bridge" data-phase-dock="0" class="hidden flex items-center gap-1">
+            <button data-tool-id="clear-weeds" onclick="selectTool('clear-weeds')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🌿 1. Limpar Margens</button>
+            <button data-tool-id="level" onclick="selectTool('level')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🚜 2. Nivelar Cabeceiras</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <span data-weeds-pill="bridge" class="text-[11px] text-emerald-300 px-1.5 font-medium">🌿 Mato: 0 rest.</span>
+            <span data-level-pill="bridge" class="text-[11px] text-amber-300 px-1.5 font-medium">📐 Platô: 0%</span>
+            <button onclick="advanceToPhase1()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Fundação Submersa →
+            </button>
+        </div>
+
+        <div data-mode-dock="bridge" data-phase-dock="1" class="hidden flex items-center gap-1">
+            <button data-tool-id="bridge-pile" onclick="selectTool('bridge-pile')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Cravar Estacas & Cabeceiras</button>
+            <button data-tool-id="bridge-coffer" onclick="selectTool('bridge-coffer')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Ensecadeira Madeira</button>
+            <button data-tool-id="bridge-pour" onclick="selectTool('bridge-pour')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">3. Concretar Pilares</button>
+            <button onclick="advanceBridgePhase2()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Vigas & Pista →
+            </button>
+        </div>
+
+        <div data-mode-dock="bridge" data-phase-dock="2" class="hidden flex items-center gap-1">
+            <button data-tool-id="bridge-girder" onclick="selectTool('bridge-girder')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Vigas Longarinas</button>
+            <button data-tool-id="bridge-deck" onclick="selectTool('bridge-deck')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Tabuleiro / Pista</button>
+            <button onclick="advanceBridgePhase3()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Acabamento & Carga →
+            </button>
+        </div>
+
+        <div data-mode-dock="bridge" data-phase-dock="3" class="hidden flex items-center gap-1">
+            <button data-tool-id="bridge-rail" onclick="selectTool('bridge-rail')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Guarda-Corpos & Postes</button>
+            <button onclick="runBridgeLoadTest()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                🚚 Testar Carga na Ponte
+            </button>
+        </div>
+
+        <!-- ==================== MODO PRÉDIO ==================== -->
+        <div data-mode-dock="building" data-phase-dock="0" class="hidden flex items-center gap-1">
+            <button data-tool-id="clear-weeds" onclick="selectTool('clear-weeds')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🌿 1. Limpar Terreno</button>
+            <button data-tool-id="level" onclick="selectTool('level')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🚜 2. Nivelar Radier</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <span data-weeds-pill="building" class="text-[11px] text-emerald-300 px-1.5 font-medium">🌿 Mato: 0 rest.</span>
+            <span data-level-pill="building" class="text-[11px] text-amber-300 px-1.5 font-medium">📐 Platô: 0%</span>
+            <button onclick="advanceToPhase1()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Estrutura & Grua →
+            </button>
+        </div>
+
+        <div data-mode-dock="building" data-phase-dock="1" class="hidden flex items-center gap-1">
+            <button data-tool-id="bld-struct" onclick="selectTool('bld-struct')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Pilares & Fosso</button>
+            <button data-tool-id="bld-slab" onclick="selectTool('bld-slab')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Lajes</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <span class="text-[11px] text-slate-400 px-1">Corte:</span>
+            <button data-keep-active="true" data-floor-cut="0" onclick="setBuildingFloorCut(0)" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px]">Térreo</button>
+            <button data-keep-active="true" data-floor-cut="1" onclick="setBuildingFloorCut(1)" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px]">1º</button>
+            <button data-keep-active="true" data-floor-cut="2" onclick="setBuildingFloorCut(2)" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px]">2º</button>
+            <button data-keep-active="true" data-floor-cut="3" onclick="setBuildingFloorCut(3)" class="tool-btn active px-2 py-1 rounded-lg border border-transparent text-[11px]">Todos</button>
+            <button onclick="advanceBuildingPhase2()" class="ml-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Alvenaria & MEP →
+            </button>
+        </div>
+
+        <div data-mode-dock="building" data-phase-dock="2" class="hidden flex items-center gap-1">
+            <button data-tool-id="bld-wall" onclick="selectTool('bld-wall')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Paredes por Andar</button>
+            <button data-tool-id="bld-mep" onclick="selectTool('bld-mep')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Prumadas MEP</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <span class="text-[11px] text-slate-400 px-1">Corte:</span>
+            <button data-keep-active="true" data-floor-cut="0" onclick="setBuildingFloorCut(0)" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px]">Térreo</button>
+            <button data-keep-active="true" data-floor-cut="1" onclick="setBuildingFloorCut(1)" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px]">1º</button>
+            <button data-keep-active="true" data-floor-cut="2" onclick="setBuildingFloorCut(2)" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px]">2º</button>
+            <button data-keep-active="true" data-floor-cut="3" onclick="setBuildingFloorCut(3)" class="tool-btn active px-2 py-1 rounded-lg border border-transparent text-[11px]">Todos</button>
+            <button onclick="advanceBuildingPhase3()" class="ml-1 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Fachada & Cobertura →
+            </button>
+        </div>
+
+        <div data-mode-dock="building" data-phase-dock="3" class="hidden flex items-center gap-1">
+            <button data-tool-id="bld-facade" onclick="selectTool('bld-facade')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Fachada & Vidros</button>
+            <button data-tool-id="bld-roof" onclick="selectTool('bld-roof'); finishBuildingRoof();" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Cobertura & Heliponto</button>
+        </div>
+
+        <!-- ==================== MODO TORRE ==================== -->
+        <div data-mode-dock="tower" data-phase-dock="0" class="hidden flex items-center gap-1">
+            <button data-tool-id="clear-weeds" onclick="selectTool('clear-weeds')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🌿 1. Limpar Colina</button>
+            <button data-tool-id="level" onclick="selectTool('level')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">🚜 2. Nivelar Base</button>
+            <div class="w-px h-5 bg-white/10 mx-1"></div>
+            <span data-weeds-pill="tower" class="text-[11px] text-emerald-300 px-1.5 font-medium">🌿 Mato: 0 rest.</span>
+            <span data-level-pill="tower" class="text-[11px] text-amber-300 px-1.5 font-medium">📐 Platô: 0%</span>
+            <button onclick="advanceToPhase1()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Sapatas em Cruz →
+            </button>
+        </div>
+
+        <div data-mode-dock="tower" data-phase-dock="1" class="hidden flex items-center gap-1">
+            <button data-tool-id="tw-dig" onclick="selectTool('tw-dig')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Cavar Sapatas</button>
+            <button data-tool-id="tw-rebar" onclick="selectTool('tw-rebar')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Chumbadores Aço</button>
+            <button data-tool-id="tw-pour" onclick="selectTool('tw-pour')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">3. Concretar Blocos</button>
+            <button onclick="advanceTowerPhase2()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Treliças & Andaimes →
+            </button>
+        </div>
+
+        <div data-mode-dock="tower" data-phase-dock="2" class="hidden flex items-center gap-1">
+            <button data-tool-id="tw-scaf" onclick="selectTool('tw-scaf')" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Andaime Madeira</button>
+            <button data-tool-id="tw-steel" onclick="selectTool('tw-steel')" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">2. Módulo Treliçado</button>
+            <button onclick="advanceTowerPhase3()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                Antena & Vento →
+            </button>
+        </div>
+
+        <div data-mode-dock="tower" data-phase-dock="3" class="hidden flex items-center gap-1">
+            <button data-tool-id="tw-top" onclick="selectTool('tw-top'); installTowerTop();" class="tool-btn active px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium">1. Mirante & Farol</button>
+            <button onclick="runTowerWindTest()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition whitespace-nowrap">
+                💨 Testar Vento & Gravidade
+            </button>
+        </div>
+    </footer>
+
+    <!-- Módulos Carregados em Ordem de Dependência (Compatível 100% com file:// sem servidor) -->
+    <script src="./src/core/state.js"></script>
+    <script src="./src/core/audio.js"></script>
+    <script src="./src/core/materials.js"></script>
+    <script src="./src/core/scene.js"></script>
+    <script src="./src/core/biomes.js"></script>
+    <script src="./src/core/events.js"></script>
+    <script src="./src/ui/hud.js"></script>
+    <script src="./src/world/terrain.js"></script>
+    <script src="./src/world/mixer.js"></script>
+    <script src="./src/entities/siteLogistics.js"></script>
+    <script src="./src/modes/house/blueprint.js"></script>
+    <script src="./src/modes/house/foundation.js"></script>
+    <script src="./src/modes/house/masonry.js"></script>
+    <script src="./src/modes/house/mep.js"></script>
+    <script src="./src/modes/house/roofFinish.js"></script>
+    <script src="./src/modes/house/houseMode.js"></script>
+    <script src="./src/modes/bridge/bridge.js"></script>
+    <script src="./src/modes/building/building.js"></script>
+    <script src="./src/modes/tower/tower.js"></script>
+    <script src="./src/entities/camp.js"></script>
+    <script src="./src/entities/navigation.js"></script>
+    <script src="./src/entities/workers.js"></script>
+    <script src="./src/ui/input.js"></script>
+    <script src="./src/main.js"></script>
+</body>
+</html>

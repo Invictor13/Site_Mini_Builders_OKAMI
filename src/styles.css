@@ -1,0 +1,125 @@
+/* =========================================================================
+   ESTILOS GLOBAIS & RESPONSIVIDADE (DESKTOP HORIZONTAL + MOBILE VERTICAL)
+   ========================================================================= */
+
+html, body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 42%, #1e2631 0%, #11161f 62%, #090c12 100%);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    overscroll-behavior: none;
+}
+
+#canvas-container {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+}
+
+.dock-surface {
+    background: rgba(11, 15, 22, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.50);
+}
+
+.tool-btn {
+    transition: all 0.16s ease;
+    color: #cbd5e1;
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.tool-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.09);
+    color: #ffffff;
+}
+
+.tool-btn:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.tool-btn.active {
+    background: rgba(217, 119, 6, 0.24);
+    border-color: rgba(245, 158, 11, 0.72);
+    color: #fde68a;
+}
+
+.tool-btn.xray-on {
+    background: rgba(14, 165, 233, 0.25);
+    border-color: rgba(56, 189, 248, 0.75);
+    color: #bae6fd;
+}
+
+.tool-btn.erase-on {
+    background: rgba(225, 29, 72, 0.25);
+    border-color: rgba(244, 63, 94, 0.75);
+    color: #fecdd3;
+}
+
+.tool-btn:disabled {
+    opacity: 0.32;
+    cursor: not-allowed;
+}
+
+.swatch-btn {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    flex-shrink: 0;
+}
+
+.swatch-btn:hover {
+    transform: scale(1.18);
+}
+
+.swatch-btn.active {
+    box-shadow: 0 0 0 2px #f59e0b;
+    transform: scale(1.15);
+}
+
+/* Barra de ferramentas com scroll horizontal invisível em telas estreitas */
+.dock-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+}
+
+.dock-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+/* Safe areas para celulares com notch / barra de gestos */
+.safe-top {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+    .safe-top {
+        padding-top: max(1rem, env(safe-area-inset-top));
+    }
+    .safe-bottom {
+        bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+}
