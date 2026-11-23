@@ -78,6 +78,26 @@
             osc.connect(g); g.connect(ctx.destination);
             osc.start(now); osc.stop(now + 0.12);
         },
+        playWoodSaw() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const len = Math.floor(ctx.sampleRate * 0.14);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) {
+                d[i] = (Math.random() * 2 - 1) * Math.sin((i / len) * Math.PI);
+            }
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'bandpass';
+            f.frequency.value = 1650;
+            f.Q.value = 2.2;
+            const g = ctx.createGain();
+            g.gain.value = 0.09;
+            src.connect(f); f.connect(g); g.connect(ctx.destination);
+            src.start();
+        },
         playMetalClang() {
             if (!this.canPlay()) return;
             const ctx = getAudioCtx();

@@ -78,10 +78,80 @@
 
         const pName = (phaseNames[mode] && phaseNames[mode][state.phase]) || `FASE ${state.phase}`;
         const biomeLabel = (MO.BIOMES && MO.BIOMES[state.biome]) ? MO.BIOMES[state.biome].label.toUpperCase() : state.biome.toUpperCase();
+        const activeLot = (MO.regionManager && MO.worldManager && MO.worldManager.meta.persistentGrowth)
+            ? MO.regionManager.getActiveLot()
+            : null;
+        const lotTag = activeLot ? ` · ${activeLot.label.toUpperCase()}` : '';
         const ind = document.getElementById('phase-indicator');
         if (ind) {
-            ind.textContent = `${modeLabels[mode]} · FASE ${state.phase} · ${pName} · ${biomeLabel} #${state.seed}`;
+            ind.textContent = `${modeLabels[mode]} · FASE ${state.phase} · ${pName}${lotTag} · ${biomeLabel} #${state.seed}`;
         }
+        if (MO.updateVillageUI) MO.updateVillageUI();
+        if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
+    };
+
+    MO.updateVillageUI = function() {
+        const isUnifiedOrHouse = Boolean(MO.state && (MO.state.unifiedVillage || MO.state.mode === 'house'));
+        const persistent = Boolean(MO.worldManager && MO.worldManager.meta.persistentGrowth);
+        const lots = MO.regionManager ? MO.regionManager.getLotsForRegion('main-valley') : [];
+        const total = lots.length || 5;
+        const done = lots.filter(l => l.status === 'completed').length;
+
+        const btn = document.getElementById('btn-village-mode');
+        const lbl = document.getElementById('village-btn-label');
+        const nextBtn = document.getElementById('btn-next-lot');
+        if (btn) {
+            btn.classList.toggle('active', persistent);
+            btn.classList.toggle('hidden', !isUnifiedOrHouse);
+        }
+        if (lbl) {
+            lbl.textContent = persistent ? `Vila: ${done}/${total}` : 'Diorama Único';
+        }
+        if (nextBtn) {
+            const hasMore = lots.some(l => l.status === 'available');
+            nextBtn.classList.toggle('hidden', !(isUnifiedOrHouse && persistent && hasMore));
+        }
+    };
+
+    MO.toggleNpcPanel = function(forceVal) {
+        const panel = document.getElementById('npc-panel');
+        const btn = document.getElementById('btn-npc-menu');
+        if (!panel) return false;
+        const isHidden = panel.classList.contains('hidden');
+        const nextOpen = (typeof forceVal === 'boolean') ? forceVal : isHidden;
+        panel.classList.toggle('hidden', !nextOpen);
+        if (btn) btn.classList.toggle('active', nextOpen);
+        if (nextOpen && MO.renderNpcRosterUI) MO.renderNpcRosterUI();
+        return nextOpen;
+    };
+
+    MO.renderNpcRosterUI = function() {
+        const rosterEl = document.getElementById('npc-roster');
+        const wbEl = document.getElementById('npc-workbench-status');
+        const state = MO.state;
+        if (wbEl && state && state.workbench && state.villageInfra) {
+            const infra = state.villageInfra;
+            const stage = !infra.demarcated
+                ? 'Aguardando demarcação do Supervisor'
+                : (!infra.roadBuilt
+                    ? 'Abertura da estrada de terra'
+                    : (!infra.workbenchBuilt ? 'Montagem da bancada & pátios' : `Madeira: ${state.workbench.rawWood} tora(s) · ${state.workbench.cutWood} pronta(s)`));
+            wbEl.textContent = stage;
+        }
+        if (!rosterEl || !state) return;
+        const workers = state.workers || [];
+        if (workers.length === 0) {
+            rosterEl.innerHTML = '<div class="text-slate-400 text-[11px] py-1">Nenhum NPC no mapa ainda. Contrate um Supervisor primeiro!</div>';
+            return;
+        }
+        rosterEl.innerHTML = workers.map(w => {
+            const badge = w.role === 'supervisor' ? '👷‍♂️ Supervisor' : `👷 ${w.name}`;
+            const status = w.statusText || 'Disponível';
+            return `<div class="flex items-center justify-between gap-2 bg-white/5 rounded-lg px-2 py-1 text-[11px]">
+                <span class="font-medium text-slate-100 shrink-0">${badge}</span>
+                <span class="text-slate-300 truncate">${status}</span>
+            </div>`;
+        }).join('');
     };
 
     MO.selectTool = function(tool) {

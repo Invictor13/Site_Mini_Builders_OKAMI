@@ -2,20 +2,28 @@
 // CORE: CONSTANTES, REGISTRY DE MODOS E ESTADO GLOBAL COMPARTILHADO
 // =========================================================================
 (function(MO) {
-    MO.DIORAMA_R = 9.2;
-    MO.GRID_SIZE = 10;          // Grade 10x10 metros
-    MO.GRID_OFFSET_Z = -0.8;    // Desloca ligeiramente para trás do lago
+    MO.DIORAMA_R = 15.0;
+    MO.GRID_SIZE = 28;          // Grade 28x28 metros para vila completa
+    MO.GRID_OFFSET_Z = -0.5;    // Centro leve da vila
     MO.PLATEAU_Y = 0.28;        // Altura alvo de terraplanagem
-    MO.WATER_LEVEL = -0.36;     // Nível do lago / rio reflexivo
+    MO.WATER_LEVEL = -0.36;     // Nível do rio reflexivo
     MO.WALL_HEIGHT = 1.80;      // Altura das paredes da casa
 
-    MO.LEVEL_RES = 45;          // Resolução do mapa de terraplanagem
+    MO.LEVEL_RES = 72;          // Resolução dos mapas de terraplanagem e estradas
     MO.levelMap = new Float32Array(MO.LEVEL_RES * MO.LEVEL_RES);
+    MO.roadMap = new Float32Array(MO.LEVEL_RES * MO.LEVEL_RES);
 
-    MO.STATION_MIXER = { x: -5.9, z: 0.6 };
-    MO.STATION_REBAR = { x: -4.8, z: 3.5 };
-    MO.STATION_BRICK = { x: 6.0, z: 0.5 };
-    MO.STATION_TIMBER = { x: 4.9, z: 2.3 };
+    MO.MAX_SUPERVISORS = 1;
+    MO.MAX_HELPERS = 10;
+
+    MO.STATION_TOOLBOX = { x: -10.8, z: 4.2 };
+    MO.STATION_ROAD_ENTRY = { x: -13.6, z: 4.5 };
+    MO.STATION_UNLOAD = { x: -9.2, z: 3.4 };
+    MO.STATION_MIXER = { x: -8.6, z: 0.6 };
+    MO.STATION_WORKBENCH = { x: -8.6, z: -2.2 };
+    MO.STATION_REBAR = { x: -6.8, z: 3.8 };
+    MO.STATION_BRICK = { x: -6.8, z: 1.4 };
+    MO.STATION_TIMBER = { x: -8.6, z: -3.6 };
 
     MO.modes = {};
     MO.MODE_ORDER = ['house', 'bridge', 'building', 'tower'];
@@ -23,6 +31,8 @@
 
     MO.state = {
         mode: 'house',
+        unifiedVillage: true,      // Mapa único de vila guiado por seed
+        villageCompleted: false,
         variant: 'L-shape',        // Variante arquitetônica sorteada ou selecionada
         biome: 'forest',           // 'forest' | 'coast' | 'cerrado' | 'mountain'
         weather: 'clear',          // 'clear' | 'rain' | 'wind'
@@ -179,6 +189,29 @@
         looseBricks: [],
         selectedBrickInHand: null,
         draggedItem: null,
+
+        // Infraestrutura do canteiro (Zero-State -> Demarcação -> Estrada/Estações -> Obras)
+        villageInfra: {
+            demarcated: false,
+            roadSegments: [],
+            roadBuilt: false,
+            eastRoadDemarcated: false,
+            eastRoadBuilt: false,
+            unloadingBuilt: false,
+            mixerBuilt: false,
+            workbenchBuilt: false,
+            stockYardsBuilt: false,
+            bridgeUnlocked: false
+        },
+
+        // Bancada de Carpintaria (Madeira bruta -> Peças cortadas reais)
+        workbench: {
+            rawWood: 0,
+            cutWood: 0,          // Estoque unificado de tábuas/caibros/escoras beneficiados
+            cutBreakdown: { formwork: 0, props: 0, scaffolds: 0, roof: 0 },
+            busyWorkerId: null,
+            sawProgress: 0
+        },
 
         // Trabalhadores & FX
         workers: [],

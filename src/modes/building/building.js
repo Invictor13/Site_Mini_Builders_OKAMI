@@ -5,11 +5,17 @@
     const BLD_W = 3.6;
     const BLD_D = 3.2;
     const FLOOR_H = 1.45;
-    const BLD_Z = -0.6;
 
-    function createTowerCrane(mastH) {
+    function getBuildingOrigin() {
+        if (MO.state.unifiedVillage && MO.worldManager && MO.worldManager.getActiveLotOrigin) {
+            return MO.worldManager.getActiveLotOrigin();
+        }
+        return { x: 0, z: -0.6 };
+    }
+
+    function createTowerCrane(mastH, bx, bz) {
         const g = new THREE.Group();
-        const cx = -3.8, cz = -2.4;
+        const cx = bx - 2.6, cz = bz - 1.8;
         const baseY = MO.getTerrainHeight(cx, cz);
         g.position.set(cx, baseY, cz);
 
@@ -63,7 +69,7 @@
     function buildBuildingSkeleton() {
         const bg = MO.groups.building;
         const bld = MO.state.building;
-        while (bg.children.length > 0) bg.remove(bg.children[0]);
+        MO.resources.clearGroup(bg);
 
         // Variação procedural de 2 a 4 andares + cor da fachada
         const floorCounts = [2, 3, 4];
@@ -73,38 +79,47 @@
         const facadeColors = ['#e2e8f0', '#cbd5e1', '#dfd3be', '#94a3b8'];
         const chosenFacadeHex = facadeColors[MO.state.seed % facadeColors.length];
 
+        const origin = getBuildingOrigin();
+        const bx = origin.x;
+        const bz = origin.z;
+        bld.originX = bx;
+        bld.originZ = bz;
+
         bld.floors = [];
         bld.floorCut = bld.numFloors;
         bld.roofDone = false;
         bld.roofBusy = false;
         bld.craneAngle = 0;
         bld.craneTargetAngle = 0.45;
-        bld.crane = createTowerCrane(1.8 + bld.numFloors * FLOOR_H + 1.2);
+        bld.crane = createTowerCrane(1.8 + bld.numFloors * FLOOR_H + 1.2, bx, bz);
 
-        const baseFloorY = MO.PLATEAU_Y + 0.05;
+        const baseFloorY = Math.max(MO.PLATEAU_Y, MO.getTerrainHeight(bx, bz)) + 0.05;
+        const root = new THREE.Group();
+        root.position.set(bx, 0, bz);
+        bg.add(root);
 
         const pad = new THREE.Mesh(new THREE.BoxGeometry(BLD_W + 0.4, 0.22, BLD_D + 0.4), MO.mats.concreteDark);
-        pad.position.set(0, baseFloorY, BLD_Z);
+        pad.position.set(0, baseFloorY, 0);
         pad.receiveShadow = true;
-        bg.add(pad);
+        root.add(pad);
 
         for (let f = 0; f < bld.numFloors; f++) {
             const fy = baseFloorY + 0.12 + f * FLOOR_H;
             const fg = new THREE.Group();
-            bg.add(fg);
+            root.add(fg);
 
             const guide = new THREE.Mesh(
                 new THREE.BoxGeometry(BLD_W, 0.06, BLD_D),
                 new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.18, depthWrite: false })
             );
-            guide.position.set(0, fy + 0.03, BLD_Z);
+            guide.position.set(0, fy + 0.03, 0);
             fg.add(guide);
 
             const hit = new THREE.Mesh(new THREE.BoxGeometry(BLD_W + 0.2, FLOOR_H, BLD_D + 0.2), new THREE.MeshBasicMaterial({ visible: false }));
-            hit.position.set(0, fy + FLOOR_H / 2, BLD_Z);
+            hit.position.set(0, fy + FLOOR_H / 2, 0);
 
             const slabMesh = new THREE.Mesh(new THREE.BoxGeometry(BLD_W + 0.14, 0.14, BLD_D + 0.14), MO.mats.concrete);
-            slabMesh.position.set(0, fy + FLOOR_H, BLD_Z);
+            slabMesh.position.set(0, fy + FLOOR_H, 0);
             slabMesh.castShadow = true; slabMesh.receiveShadow = true;
             slabMesh.visible = false;
             fg.add(slabMesh);
@@ -113,12 +128,12 @@
             [[-BLD_W / 2 + 0.15, -BLD_D / 2 + 0.15], [0, -BLD_D / 2 + 0.15], [BLD_W / 2 - 0.15, -BLD_D / 2 + 0.15],
              [-BLD_W / 2 + 0.15, BLD_D / 2 - 0.15], [0, BLD_D / 2 - 0.15], [BLD_W / 2 - 0.15, BLD_D / 2 - 0.15]].forEach(([px, pz]) => {
                 const col = new THREE.Mesh(new THREE.BoxGeometry(0.26, FLOOR_H, 0.26), MO.mats.concrete);
-                col.position.set(px, fy + FLOOR_H / 2, BLD_Z + pz);
+                col.position.set(px, fy + FLOOR_H / 2, pz);
                 col.castShadow = true;
                 structGroup.add(col);
             });
             const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.95, FLOOR_H, 0.95), MO.mats.concreteDark);
-            shaft.position.set(0, fy + FLOOR_H / 2, BLD_Z);
+            shaft.position.set(0, fy + FLOOR_H / 2, 0);
             shaft.castShadow = true;
             structGroup.add(shaft);
             structGroup.visible = false;
@@ -128,17 +143,17 @@
             const wallMat = new THREE.MeshStandardMaterial({ map: MO.mats.brickCeramic.map, roughness: 0.84 });
             [-BLD_D / 2 + 0.1, BLD_D / 2 - 0.1].forEach(wz => {
                 const sill = new THREE.Mesh(new THREE.BoxGeometry(BLD_W - 0.3, 0.42, 0.16), wallMat);
-                sill.position.set(0, fy + 0.21, BLD_Z + wz);
+                sill.position.set(0, fy + 0.21, wz);
                 const head = new THREE.Mesh(new THREE.BoxGeometry(BLD_W - 0.3, 0.24, 0.16), wallMat);
-                head.position.set(0, fy + FLOOR_H - 0.18, BLD_Z + wz);
+                head.position.set(0, fy + FLOOR_H - 0.18, wz);
                 sill.castShadow = true; head.castShadow = true;
                 wallGroup.add(sill, head);
             });
             [-BLD_W / 2 + 0.1, BLD_W / 2 - 0.1].forEach(wx => {
                 const sideSill = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.45, BLD_D - 0.3), wallMat);
-                sideSill.position.set(wx, fy + 0.225, BLD_Z);
+                sideSill.position.set(wx, fy + 0.225, 0);
                 const sideHead = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.24, BLD_D - 0.3), wallMat);
-                sideHead.position.set(wx, fy + FLOOR_H - 0.18, BLD_Z);
+                sideHead.position.set(wx, fy + FLOOR_H - 0.18, 0);
                 sideSill.castShadow = true; sideHead.castShadow = true;
                 wallGroup.add(sideSill, sideHead);
             });
@@ -147,18 +162,18 @@
 
             const mepGroup = new THREE.Group();
             const pElec = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, FLOOR_H, 8), MO.mats.conduit);
-            pElec.position.set(-0.65, fy + FLOOR_H / 2, BLD_Z);
+            pElec.position.set(-0.65, fy + FLOOR_H / 2, 0);
             const pWater = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, FLOOR_H, 8), MO.mats.pipeCold);
-            pWater.position.set(0.65, fy + FLOOR_H / 2, BLD_Z);
+            pWater.position.set(0.65, fy + FLOOR_H / 2, 0);
             const pSewage = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, FLOOR_H, 8), MO.mats.pipeSewage);
-            pSewage.position.set(0.82, fy + FLOOR_H / 2, BLD_Z);
+            pSewage.position.set(0.82, fy + FLOOR_H / 2, 0);
             const pLight = new THREE.PointLight(0xffd28a, 0, 5.2);
-            pLight.position.set(0, fy + FLOOR_H - 0.25, BLD_Z + 0.5);
+            pLight.position.set(0, fy + FLOOR_H - 0.25, 0.5);
             const bulb = new THREE.Mesh(
                 new THREE.SphereGeometry(0.09, 8, 8),
                 new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfbbf24, emissiveIntensity: 1.2 })
             );
-            bulb.position.set(0, fy + FLOOR_H - 0.14, BLD_Z + 0.5);
+            bulb.position.set(0, fy + FLOOR_H - 0.14, 0.5);
             mepGroup.add(pElec, pWater, pSewage, pLight, bulb);
             mepGroup.visible = false;
             fg.add(mepGroup);
@@ -167,26 +182,26 @@
             const fMat = new THREE.MeshStandardMaterial({ color: chosenFacadeHex, roughness: 0.72 });
             [-BLD_D / 2 + 0.09, BLD_D / 2 - 0.09].forEach(wz => {
                 const bandB = new THREE.Mesh(new THREE.BoxGeometry(BLD_W + 0.06, 0.44, 0.18), fMat);
-                bandB.position.set(0, fy + 0.22, BLD_Z + wz);
+                bandB.position.set(0, fy + 0.22, wz);
                 const bandT = new THREE.Mesh(new THREE.BoxGeometry(BLD_W + 0.06, 0.26, 0.18), fMat);
-                bandT.position.set(0, fy + FLOOR_H - 0.14, BLD_Z + wz);
+                bandT.position.set(0, fy + FLOOR_H - 0.14, wz);
                 const glass = new THREE.Mesh(new THREE.BoxGeometry(BLD_W - 0.4, FLOOR_H - 0.68, 0.04), MO.mats.glass);
-                glass.position.set(0, fy + 0.44 + (FLOOR_H - 0.68) / 2, BLD_Z + wz);
+                glass.position.set(0, fy + 0.44 + (FLOOR_H - 0.68) / 2, wz);
                 facadeGroup.add(bandB, bandT, glass);
             });
             [-BLD_W / 2 + 0.09, BLD_W / 2 - 0.09].forEach(wx => {
                 const sB = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.46, BLD_D + 0.06), fMat);
-                sB.position.set(wx, fy + 0.23, BLD_Z);
+                sB.position.set(wx, fy + 0.23, 0);
                 const sT = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.26, BLD_D + 0.06), fMat);
-                sT.position.set(wx, fy + FLOOR_H - 0.14, BLD_Z);
+                sT.position.set(wx, fy + FLOOR_H - 0.14, 0);
                 const sG = new THREE.Mesh(new THREE.BoxGeometry(0.04, FLOOR_H - 0.70, BLD_D - 0.4), MO.mats.glass);
-                sG.position.set(wx, fy + 0.44 + (FLOOR_H - 0.70) / 2, BLD_Z);
+                sG.position.set(wx, fy + 0.44 + (FLOOR_H - 0.70) / 2, 0);
                 facadeGroup.add(sB, sT, sG);
             });
             // Mobília interna visível pelas janelas panorâmicas
             const desk1 = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.34, 0.42), MO.mats.doorWood);
-            desk1.position.set(-0.95, fy + 0.24, BLD_Z + 0.75);
-            const desk2 = desk1.clone(); desk2.position.set(0.95, fy + 0.24, BLD_Z + 0.75);
+            desk1.position.set(-0.95, fy + 0.24, 0.75);
+            const desk2 = desk1.clone(); desk2.position.set(0.95, fy + 0.24, 0.75);
             facadeGroup.add(desk1, desk2);
             facadeGroup.visible = false;
             fg.add(facadeGroup);
@@ -204,22 +219,22 @@
         const roofY = baseFloorY + 0.12 + bld.numFloors * FLOOR_H + 0.07;
         const roofGrp = new THREE.Group();
         const parapet1 = new THREE.Mesh(new THREE.BoxGeometry(BLD_W + 0.18, 0.32, 0.14), MO.mats.concreteDark);
-        parapet1.position.set(0, roofY + 0.16, BLD_Z + BLD_D / 2);
-        const parapet2 = parapet1.clone(); parapet2.position.z = BLD_Z - BLD_D / 2;
+        parapet1.position.set(0, roofY + 0.16, BLD_D / 2);
+        const parapet2 = parapet1.clone(); parapet2.position.z = -BLD_D / 2;
         const parapet3 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.32, BLD_D + 0.18), MO.mats.concreteDark);
-        parapet3.position.set(-BLD_W / 2, roofY + 0.16, BLD_Z);
+        parapet3.position.set(-BLD_W / 2, roofY + 0.16, 0);
         const parapet4 = parapet3.clone(); parapet4.position.x = BLD_W / 2;
         const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.42, 0.65, 16), MO.mats.waterTank);
-        tank.position.set(-1.1, roofY + 0.33, BLD_Z - 0.7);
+        tank.position.set(-1.1, roofY + 0.33, -0.7);
         const heliRing = new THREE.Mesh(
             new THREE.RingGeometry(0.55, 0.68, 24),
             new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide })
         );
         heliRing.rotation.x = -Math.PI / 2;
-        heliRing.position.set(0.5, roofY + 0.02, BLD_Z + 0.2);
+        heliRing.position.set(0.5, roofY + 0.02, 0.2);
         roofGrp.add(parapet1, parapet2, parapet3, parapet4, tank, heliRing);
         roofGrp.visible = false;
-        bg.add(roofGrp);
+        root.add(roofGrp);
         bld.roofGroup = roofGrp;
     }
 
@@ -240,7 +255,9 @@
     function aimCraneAtFloor(fl) {
         const bld = MO.state.building;
         if (!bld.crane) return;
-        bld.craneTargetAngle = Math.atan2(-(BLD_Z - bld.crane.cz), 0 - bld.crane.cx) + (fl.index - 1) * 0.18;
+        const bx = bld.originX !== undefined ? bld.originX : 0;
+        const bz = bld.originZ !== undefined ? bld.originZ : -0.6;
+        bld.craneTargetAngle = Math.atan2(-(bz - bld.crane.cz), bx - bld.crane.cx) + (fl.index - 1) * 0.18;
     }
 
     function buildFloorStructure(fl) {
@@ -248,7 +265,10 @@
         fl.hasStruct = true; fl.res = false;
         fl.structGroup.visible = true;
         aimCraneAtFloor(fl);
-        if (MO.spawnWeldSparks) MO.spawnWeldSparks(0, fl.baseY + 0.6, BLD_Z);
+        const bld = MO.state.building;
+        const bx = bld.originX !== undefined ? bld.originX : 0;
+        const bz = bld.originZ !== undefined ? bld.originZ : -0.6;
+        if (MO.spawnWeldSparks) MO.spawnWeldSparks(bx, fl.baseY + 0.6, bz);
         else MO.SoundFX.playMetalClang();
     }
 
@@ -258,7 +278,10 @@
         fl.slabMesh.visible = true;
         fl.guide.visible = false;
         aimCraneAtFloor(fl);
-        MO.spawnBurst(0, fl.baseY + FLOOR_H, BLD_Z, 0x94a3b8, 10);
+        const bld = MO.state.building;
+        const bx = bld.originX !== undefined ? bld.originX : 0;
+        const bz = bld.originZ !== undefined ? bld.originZ : -0.6;
+        MO.spawnBurst(bx, fl.baseY + FLOOR_H, bz, 0x94a3b8, 10);
         MO.SoundFX.playMortarSquish();
     }
 
@@ -267,7 +290,10 @@
         fl.hasWalls = true; fl.res = false;
         fl.wallGroup.visible = true;
         aimCraneAtFloor(fl);
-        MO.spawnBurst(0, fl.baseY + 0.5, BLD_Z, 0x9d4627, 10);
+        const bld = MO.state.building;
+        const bx = bld.originX !== undefined ? bld.originX : 0;
+        const bz = bld.originZ !== undefined ? bld.originZ : -0.6;
+        MO.spawnBurst(bx, fl.baseY + 0.5, bz, 0x9d4627, 10);
         MO.SoundFX.playBrickClack();
     }
 
@@ -292,8 +318,10 @@
         const bld = state.building;
         if (bld.roofDone) return;
 
+        const bx = bld.originX !== undefined ? bld.originX : 0;
+        const bz = bld.originZ !== undefined ? bld.originZ : -0.6;
         if (state.riskProfile === 'realistic' && state.structural.integrity < 72 && !state.structural.repairedOnce) {
-            MO.triggerStructuralCollapse('SOBRECARGA NA LAJE SUPERIOR DO EDIFÍCIO', { x: 0, y: 2.5, z: BLD_Z });
+            MO.triggerStructuralCollapse('SOBRECARGA NA LAJE SUPERIOR DO EDIFÍCIO', { x: bx, y: 2.5, z: bz });
             if (!state.screensaver) return;
         }
 
@@ -383,24 +411,26 @@
         assignWorkerTask(w, setWorkerTool) {
             const state = MO.state;
             const bld = state.building;
+            const bx = bld.originX !== undefined ? bld.originX : 0;
+            const bz = bld.originZ !== undefined ? bld.originZ : -0.6;
             if (state.phase === 1) {
                 const f1 = bld.floors.find(f => !f.hasStruct && !f.res && (f.index === 0 || bld.floors[f.index - 1].hasSlab));
-                if (f1) { f1.res = true; w.task = { type: 'bld-struct', item: f1, duration: 0.60 }; w.tx = -1.6; w.tz = BLD_Z + 1.4; setWorkerTool(w.rig, 'hammer'); return true; }
+                if (f1) { f1.res = true; w.task = { type: 'bld-struct', item: f1, duration: 0.60 }; w.tx = bx - 1.6; w.tz = bz + 1.4; setWorkerTool(w.rig, 'hammer'); return true; }
                 const f2 = bld.floors.find(f => f.hasStruct && !f.hasSlab && !f.res);
-                if (f2) { f2.res = true; w.task = { type: 'bld-slab', item: f2, duration: 0.56 }; w.tx = 1.6; w.tz = BLD_Z + 1.4; setWorkerTool(w.rig, 'trowel'); return true; }
+                if (f2) { f2.res = true; w.task = { type: 'bld-slab', item: f2, duration: 0.56 }; w.tx = bx + 1.6; w.tz = bz + 1.4; setWorkerTool(w.rig, 'trowel'); return true; }
             }
             if (state.phase === 2) {
                 const f3 = bld.floors.find(f => f.hasSlab && !f.hasWalls && !f.res);
-                if (f3) { f3.res = true; w.task = { type: 'bld-wall', item: f3, duration: 0.55 }; w.tx = -1.5; w.tz = BLD_Z - 1.5; setWorkerTool(w.rig, 'brick'); return true; }
+                if (f3) { f3.res = true; w.task = { type: 'bld-wall', item: f3, duration: 0.55 }; w.tx = bx - 1.5; w.tz = bz - 1.5; setWorkerTool(w.rig, 'brick'); return true; }
                 const f4 = bld.floors.find(f => f.hasWalls && !f.mepDone && !f.res);
-                if (f4) { f4.res = true; w.task = { type: 'bld-mep', item: f4, duration: 0.50 }; w.tx = 1.5; w.tz = BLD_Z - 1.5; setWorkerTool(w.rig, 'hammer'); return true; }
+                if (f4) { f4.res = true; w.task = { type: 'bld-mep', item: f4, duration: 0.50 }; w.tx = bx + 1.5; w.tz = bz - 1.5; setWorkerTool(w.rig, 'hammer'); return true; }
             }
             if (state.phase === 3) {
                 const f5 = bld.floors.find(f => f.mepDone && !f.facadeDone && !f.res);
-                if (f5) { f5.res = true; w.task = { type: 'bld-facade', item: f5, duration: 0.58 }; w.tx = 0; w.tz = BLD_Z + 1.8; setWorkerTool(w.rig, 'trowel'); return true; }
+                if (f5) { f5.res = true; w.task = { type: 'bld-facade', item: f5, duration: 0.58 }; w.tx = bx; w.tz = bz + 1.8; setWorkerTool(w.rig, 'trowel'); return true; }
                 if (bld.floors.every(f => f.facadeDone) && !bld.roofDone && !bld.roofBusy) {
                     bld.roofBusy = true;
-                    w.task = { type: 'bld-roof', duration: 0.70 }; w.tx = -0.8; w.tz = BLD_Z + 1.7; setWorkerTool(w.rig, 'hammer'); return true;
+                    w.task = { type: 'bld-roof', duration: 0.70 }; w.tx = bx - 0.8; w.tz = bz + 1.7; setWorkerTool(w.rig, 'hammer'); return true;
                 }
             }
             return false;

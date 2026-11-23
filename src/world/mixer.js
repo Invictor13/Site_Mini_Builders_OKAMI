@@ -69,6 +69,18 @@
     MO.placeMixerStationOnTerrain = function() {
         const y = MO.getTerrainHeight(MO.STATION_MIXER.x, MO.STATION_MIXER.z);
         stationGroup.position.set(MO.STATION_MIXER.x, y, MO.STATION_MIXER.z);
+        if (MO.state && MO.state.unifiedVillage && MO.state.villageInfra) {
+            stationGroup.visible = Boolean(MO.state.villageInfra.mixerBuilt);
+        } else {
+            stationGroup.visible = true;
+        }
+    };
+
+    MO.setMixerBuilt = function(built) {
+        if (MO.state && MO.state.villageInfra) {
+            MO.state.villageInfra.mixerBuilt = Boolean(built);
+        }
+        stationGroup.visible = Boolean(built);
     };
 
     function createPhysicalSupply(type, x, y, z) {
@@ -108,7 +120,7 @@
         const state = MO.state;
         state.draggableSupplies = state.draggableSupplies.filter(s => {
             if (s.type === 'bucket') return true;
-            MO.groups.physicsSupplies.remove(s.mesh);
+            MO.resources.removeAndDispose(MO.groups.physicsSupplies, s.mesh);
             return false;
         });
         const ix = MO.STATION_MIXER.x, iz = MO.STATION_MIXER.z;

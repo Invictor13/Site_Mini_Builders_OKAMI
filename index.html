@@ -22,13 +22,14 @@
     <!-- HEADER RESPONSIVO (Empilha limpo no celular vertical, cantos opostos no monitor horizontal) -->
     <header class="hud-hideable fixed top-0 inset-x-0 z-20 safe-top px-2 sm:px-4 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-1.5 pointer-events-none">
 
-        <!-- Seletor de Contratos + Fase Atual -->
+        <!-- Seletor de Foco da Vila + Fase Atual -->
         <div class="flex flex-col items-start gap-1.5 max-w-full">
             <div class="pointer-events-auto dock-surface dock-scroll rounded-xl p-1 flex items-center gap-1 max-w-[96vw]">
-                <button data-mode-btn="house" data-keep-active="true" onclick="switchMode('house')" class="tool-btn active px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🏠 Casa</button>
-                <button data-mode-btn="bridge" data-keep-active="true" onclick="switchMode('bridge')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🌉 Ponte</button>
-                <button data-mode-btn="building" data-keep-active="true" onclick="switchMode('building')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🏢 Prédio</button>
-                <button data-mode-btn="tower" data-keep-active="true" onclick="switchMode('tower')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold">🗼 Torre</button>
+                <button data-region-focus="overview" data-keep-active="true" onclick="focusVillageRegion('overview')" class="tool-btn active px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Visão panorâmica da Vila">🗺️ Vila</button>
+                <button data-region-focus="house" data-keep-active="true" onclick="focusVillageRegion('house')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera nas Casas">🏠 Casas</button>
+                <button data-region-focus="bridge" data-keep-active="true" onclick="focusVillageRegion('bridge')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera na Ponte sobre o Rio">🌉 Ponte</button>
+                <button data-region-focus="building" data-keep-active="true" onclick="focusVillageRegion('building')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera no Prédio">🏢 Prédio</button>
+                <button data-region-focus="tower" data-keep-active="true" onclick="focusVillageRegion('tower')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera na Torre">🗼 Torre</button>
             </div>
             <div class="dock-surface rounded-xl px-3 py-1.5 flex items-center gap-2 max-w-[96vw]">
                 <span id="phase-dot" class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
@@ -42,6 +43,12 @@
         <div class="pointer-events-auto dock-surface dock-scroll rounded-xl p-1 flex items-center gap-1 max-w-[96vw] self-start lg:self-auto">
             <button id="btn-screensaver" onclick="toggleScreensaverMode()" class="tool-btn flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-emerald-300" title="Modo Protetor de Tela Relaxante (Autopilot 100%)">
                 <span>🌙</span><span id="screensaver-btn-label">Modo Relax</span>
+            </button>
+            <button id="btn-village-mode" data-keep-active="true" onclick="togglePersistentVillage()" class="tool-btn active flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-amber-200" title="Vila Contínua: preserva casas concluídas e constrói nos próximos lotes">
+                <span>🏘️</span><span id="village-btn-label">Vila: 0/3</span>
+            </button>
+            <button id="btn-next-lot" onclick="advanceToNextVillageLot()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-200" title="Preservar obra atual e avançar para o próximo lote da vila">
+                <span>⏩</span><span class="hidden sm:inline">Próx. Lote</span>
             </button>
             <button id="btn-playlist" onclick="togglePlaylistMode()" class="tool-btn active px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Playlist Automática entre Obras no Modo Relax">
                 <span>🔁</span>
@@ -71,8 +78,11 @@
                 <span>🔊</span>
             </button>
             <div class="w-px h-4 bg-white/10 shrink-0"></div>
-            <button id="btn-hire-worker" onclick="hireMiniWorker()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Contratar Mini Ajudante Autônomo">
-                <span>👷</span><span id="worker-btn-label">Ajudante (0/3)</span>
+            <button id="btn-sim-speed" data-keep-active="true" onclick="cycleSimSpeed()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-amber-300" title="Velocidade da Simulação (1x / 2x / 4x)">
+                <span>⚡</span><span id="speed-btn-label">1x</span>
+            </button>
+            <button id="btn-npc-menu" data-keep-active="true" onclick="toggleNpcPanel()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Categoria NPC: Contratar Supervisor (máx. 1) e Ajudantes (máx. 10)">
+                <span>👷</span><span id="npc-btn-label">NPCs (0/11)</span>
             </button>
             <button id="btn-xray" onclick="toggleXRayMode()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Modo Raio-X (Ver Instalações)">
                 <span>👁️</span><span>Raio-X</span>
@@ -80,14 +90,51 @@
             <button id="tool-erase" onclick="selectTool('erase')" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Apagar / Demolir">
                 <span>🗑️</span>
             </button>
-            <button id="btn-new-terrain" onclick="regenerateNewTerrain()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-300" title="Gerar Novo Terreno Procedural">
+            <button id="btn-new-terrain" onclick="regenerateNewTerrain()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-300" title="Gerar Nova Semente de Vila">
                 <span>🎲</span>
+            </button>
+            <button id="btn-diagnostics" onclick="toggleDiagnostics()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-emerald-300" title="Diagnóstico FPS, Memória e Draw Calls (Tecla P)">
+                <span>📊</span>
             </button>
         </div>
     </header>
 
+    <!-- Painel Dropdown da Categoria NPC (Supervisor + até 10 Ajudantes) -->
+    <aside id="npc-panel" class="hidden hud-hideable fixed top-24 right-3 z-30 dock-surface rounded-2xl p-3 w-[310px] max-w-[92vw] space-y-2.5 shadow-2xl border border-white/10">
+        <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span class="text-xs font-semibold text-white">👷 Categoria NPC · Vila</span>
+            <button onclick="toggleNpcPanel(false)" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+            <button id="btn-hire-supervisor" onclick="hireSupervisor(); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1.5 rounded-lg bg-slate-700/80 hover:bg-slate-600 text-[11px] font-semibold text-amber-200 transition">
+                👷‍♂️ <span id="sup-count-label">Sup (0/1)</span>
+            </button>
+            <button id="btn-hire-helper" onclick="hireHelper(); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1.5 rounded-lg bg-sky-600/80 hover:bg-sky-500 text-[11px] font-semibold text-white transition">
+                👷 <span id="help-count-label">+1 Ajud (0/10)</span>
+            </button>
+            <button onclick="hireCrew(4, true); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-[11px] font-semibold text-white transition">
+                🚀 +Equipe
+            </button>
+        </div>
+        <div class="text-[11px] text-amber-200/90 bg-black/25 rounded-lg px-2 py-1.5 flex items-center justify-between">
+            <span>🪵 Bancada</span>
+            <span id="npc-workbench-status" class="truncate ml-2">Aguardando supervisor</span>
+        </div>
+        <div id="npc-roster" class="max-h-44 overflow-y-auto space-y-1 pr-0.5"></div>
+    </aside>
+
     <!-- Selo de Laudo Técnico (Aprovado / Falha Estrutural) -->
     <div id="laudo-badge" class="hidden"></div>
+
+    <!-- Painel discreto de diagnóstico (FPS, GPU Mem, Draw Calls) -->
+    <aside id="diag-panel" class="hidden hud-hideable fixed bottom-20 right-3 z-30 dock-surface rounded-xl px-3 py-2 text-[11px] font-mono text-slate-200 pointer-events-none select-none min-w-[225px] space-y-0.5">
+        <div class="flex justify-between gap-4 text-emerald-300 font-semibold"><span>FPS</span><span id="diag-fps">0 FPS</span></div>
+        <div class="flex justify-between gap-4"><span>Simulação</span><span id="diag-sim">0/s · NPCs 0</span></div>
+        <div class="flex justify-between gap-4"><span>Render</span><span id="diag-draw">0 calls · 0 tris</span></div>
+        <div class="flex justify-between gap-4"><span>GPU Mem</span><span id="diag-gpu">Geos 0 · Tex 0</span></div>
+        <div class="flex justify-between gap-4 text-slate-400"><span>JS Heap</span><span id="diag-heap">N/A</span></div>
+        <div class="flex justify-between gap-4 text-slate-400"><span>Protegidos</span><span id="diag-prot">0</span></div>
+    </aside>
 
     <!-- Notificação Flutuante Sutil (Ajustada abaixo do header em celulares verticais e monitores) -->
     <div id="toast-box" class="hud-hideable fixed top-32 lg:top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-none transition-all duration-300 opacity-0 transform -translate-y-2 max-w-[94vw]">
@@ -108,7 +155,7 @@
             <span data-weeds-pill="house" class="text-[11px] text-emerald-300 px-1.5 font-medium">🌿 Mato: 0 rest.</span>
             <span data-level-pill="house" class="text-[11px] text-amber-300 px-1.5 font-medium">📐 Platô: 0%</span>
             <div class="w-px h-5 bg-white/10 mx-1"></div>
-            <button onclick="hireMiniWorker()" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium text-amber-300">👷 Chamar Ajudante</button>
+            <button onclick="toggleNpcPanel()" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs font-medium text-amber-300">👷 Equipe & Supervisor</button>
             <button onclick="advanceToPhase1()" class="ml-1 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold tracking-wide transition whitespace-nowrap">
                 Planta & Marcação →
             </button>
@@ -321,14 +368,21 @@
 
     <!-- Módulos Carregados em Ordem de Dependência (Compatível 100% com file:// sem servidor) -->
     <script src="./src/core/state.js"></script>
+    <script src="./src/core/simClock.js"></script>
     <script src="./src/core/audio.js"></script>
     <script src="./src/core/materials.js"></script>
+    <script src="./src/core/resources.js"></script>
+    <script src="./src/core/diagnostics.js"></script>
     <script src="./src/core/scene.js"></script>
     <script src="./src/core/biomes.js"></script>
     <script src="./src/core/events.js"></script>
     <script src="./src/ui/hud.js"></script>
     <script src="./src/world/terrain.js"></script>
     <script src="./src/world/mixer.js"></script>
+    <script src="./src/world/workbench.js"></script>
+    <script src="./src/world/regionManager.js"></script>
+    <script src="./src/world/constructionManager.js"></script>
+    <script src="./src/world/worldManager.js"></script>
     <script src="./src/entities/siteLogistics.js"></script>
     <script src="./src/modes/house/blueprint.js"></script>
     <script src="./src/modes/house/foundation.js"></script>
@@ -341,6 +395,10 @@
     <script src="./src/modes/tower/tower.js"></script>
     <script src="./src/entities/camp.js"></script>
     <script src="./src/entities/navigation.js"></script>
+    <script src="./src/entities/workers/workerRegistry.js"></script>
+    <script src="./src/entities/workers/workerNeeds.js"></script>
+    <script src="./src/entities/workers/workerTasks.js"></script>
+    <script src="./src/entities/workers/workerAgent.js"></script>
     <script src="./src/entities/workers.js"></script>
     <script src="./src/ui/input.js"></script>
     <script src="./src/main.js"></script>

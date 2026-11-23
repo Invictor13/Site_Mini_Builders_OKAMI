@@ -2,8 +2,8 @@
 // ENTITIES: FÍSICA DE COLISÃO COM PAREDES, PORTAS E PATHFINDING A*
 // =========================================================================
 (function(MO) {
-    const GRID_N = 42;
-    const WORLD_HALF = 8.4;
+    const GRID_N = 72;
+    const WORLD_HALF = 14.4;
     const CELL = (WORLD_HALF * 2) / GRID_N; // 0.40m por célula (passa limpo em portas de 0.68m)
 
     function distPointToSegmentSq(px, pz, x1, z1, x2, z2) {
@@ -102,6 +102,13 @@
             }
         }
 
+        if (MO.worldManager && MO.worldManager.getWorldObstacles) {
+            const persisted = MO.worldManager.getWorldObstacles();
+            if (persisted.segments) persisted.segments.forEach(s => segments.push(s));
+            if (persisted.circles) persisted.circles.forEach(c => circles.push(c));
+            if (persisted.doorCenters) persisted.doorCenters.forEach(d => doorCenters.push(d));
+        }
+
         return { segments, circles, doorCenters };
     }
 
@@ -118,8 +125,20 @@
         };
     }
 
+    function isRiverBlockedAt(wx, wz) {
+        if (!MO.state || !MO.state.unifiedVillage || !MO.getRiverCenterX) return false;
+        const rx = MO.getRiverCenterX(wz);
+        if (Math.abs(wx - rx) >= 1.95) return false;
+        const infra = MO.state.villageInfra;
+        const bz = (infra && infra.bridgeZ !== undefined) ? infra.bridgeZ : -0.6;
+        if (infra && infra.bridgeUnlocked && Math.abs(wz - bz) < 0.92) return false;
+        return true;
+    }
+    MO.isRiverBlockedAt = isRiverBlockedAt;
+
     function isCellBlocked(wx, wz, segments, circles, doorCenters) {
         if (Math.hypot(wx, wz) > MO.DIORAMA_R - 0.60) return true;
+        if (isRiverBlockedAt(wx, wz)) return true;
         // Garante corredor livre pelo centro das portas!
         for (let i = 0; i < doorCenters.length; i++) {
             const d = doorCenters[i];
@@ -155,7 +174,9 @@
 
     MO.computeWorkerPath = function(w, startX, startZ, goalX, goalZ) {
         const { segments, circles, doorCenters } = collectObstacles(w);
-        if (segments.length === 0) return [{ x: goalX, z: goalZ }];
+        const crossesRiver = MO.state.unifiedVillage && MO.getRiverCenterX
+            && ((startX - MO.getRiverCenterX(startZ)) * (goalX - MO.getRiverCenterX(goalZ)) <= 0);
+        if (segments.length === 0 && !crossesRiver) return [{ x: goalX, z: goalZ }];
 
         const startC = worldToGrid(startX, startZ);
         const goalC = worldToGrid(goalX, goalZ);
@@ -300,6 +321,10 @@
             if (rCur > rMax) {
                 x = (x / rCur) * rMax;
                 z = (z / rCur) * rMax;
+            }
+            if (isRiverBlockedAt(x, z)) {
+                const rx = MO.getRiverCenterX(z);
+                x = x < rx ? (rx - 1.98) : (rx + 1.98);
             }
         }
         return { x, z };

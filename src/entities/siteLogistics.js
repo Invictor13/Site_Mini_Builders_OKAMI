@@ -11,7 +11,7 @@
 
     MO.spawnBeamRack = function(quiet) {
         const state = MO.state;
-        while (beamRackGroup.children.length > 0) beamRackGroup.remove(beamRackGroup.children[0]);
+        MO.resources.clearGroup(beamRackGroup);
         state.looseBeams = [];
 
         const tx = MO.STATION_TIMBER.x;
@@ -54,19 +54,29 @@
             });
         }
 
+        if (MO.state && MO.state.unifiedVillage && MO.state.villageInfra) {
+            beamRackGroup.visible = Boolean(MO.state.villageInfra.stockYardsBuilt);
+        } else {
+            beamRackGroup.visible = true;
+        }
         if (!quiet) {
             MO.SoundFX.playHammerWood();
             MO.showToast('Estoque de tábuas e vigas estruturais descarregado no canteiro!', '🪵');
         }
     };
 
+    let propsVisualGroup = null;
+    let unloadingPadGroup = null;
+
     MO.rebuildSiteProps = function() {
-        while (logisticsGroup.children.length > 0) logisticsGroup.remove(logisticsGroup.children[0]);
+        MO.resources.clearGroup(logisticsGroup);
+        propsVisualGroup = new THREE.Group();
+        unloadingPadGroup = new THREE.Group();
 
         const mode = MO.state.mode;
         // 1. Placa de Obra & Cones de Segurança
-        const sx = mode === 'bridge' ? -4.9 : -3.8;
-        const sz = 4.2;
+        const sx = MO.state.unifiedVillage ? -11.4 : (mode === 'bridge' ? -4.9 : -5.4);
+        const sz = MO.state.unifiedVillage ? 2.4 : 5.4;
         const sy = Math.max(MO.WATER_LEVEL + 0.15, MO.getTerrainHeight(sx, sz));
 
         const signGroup = new THREE.Group();
@@ -86,21 +96,37 @@
         );
         stripe.position.set(0, 0.75, 0);
         signGroup.add(postL, postR, board, stripe);
-        logisticsGroup.add(signGroup);
+        propsVisualGroup.add(signGroup);
 
-        const coneMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 });
-        [[-2.8, 4.4], [-2.1, 4.6]].forEach(([cx, cz]) => {
+        let coneMat = null;
+        const coneCoords = MO.state.unifiedVillage ? [[-9.8, 4.4], [-8.4, 4.4]] : [[-4.4, 5.6], [-3.7, 5.8]];
+        coneCoords.forEach(([cx, cz]) => {
             const cy = MO.getTerrainHeight(cx, cz);
             if (cy > MO.WATER_LEVEL + 0.1) {
+                if (!coneMat) coneMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 });
                 const cone = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.30, 8), coneMat);
                 cone.position.set(cx, cy + 0.15, cz);
                 cone.castShadow = true;
-                logisticsGroup.add(cone);
+                propsVisualGroup.add(cone);
             }
         });
 
-        // 2. Caçamba de Entulho / Capina
-        const bx = 5.2, bz = 3.5;
+        // 2. Baia de Descarga (plataforma compactada/cascalho onde caminhão despeja)
+        const ux = MO.STATION_UNLOAD ? MO.STATION_UNLOAD.x : -9.2;
+        const uz = MO.STATION_UNLOAD ? MO.STATION_UNLOAD.z : 3.4;
+        const uy = Math.max(MO.WATER_LEVEL + 0.12, MO.getTerrainHeight(ux, uz));
+        const pad = new THREE.Mesh(
+            new THREE.BoxGeometry(2.4, 0.08, 1.8),
+            MO.mats.concreteDark
+        );
+        pad.position.set(ux, uy + 0.03, uz);
+        pad.receiveShadow = true;
+        unloadingPadGroup.add(pad);
+        logisticsGroup.add(unloadingPadGroup);
+
+        // 3. Caçamba de Entulho / Capina
+        const bx = MO.state.unifiedVillage ? -7.2 : 6.2;
+        const bz = MO.state.unifiedVillage ? 5.2 : 4.6;
         const by = Math.max(MO.WATER_LEVEL + 0.12, MO.getTerrainHeight(bx, bz));
         const skip = new THREE.Group();
         skip.position.set(bx, by, bz);
@@ -117,8 +143,15 @@
         sTrash.scale.set(1.5, 0.4, 0.9);
         sTrash.visible = false;
         skip.add(sBase, sTrash);
-        logisticsGroup.add(skip);
+        propsVisualGroup.add(skip);
         MO.state.site.skipTrashMesh = sTrash;
+
+        const infra = MO.state.villageInfra;
+        if (MO.state.unifiedVillage && infra) {
+            unloadingPadGroup.visible = Boolean(infra.unloadingBuilt);
+            propsVisualGroup.visible = Boolean(infra.stockYardsBuilt);
+        }
+        logisticsGroup.add(propsVisualGroup);
 
         // 3. Caminhão de Entregas Animado com Carga Visível na Caçamba
         const truck = new THREE.Group();
@@ -171,9 +204,44 @@
         MO.SoundFX.playTruckHorn();
     }
 
+    MO.setUnloadingBuilt = function(built) {
+        if (MO.state && MO.state.villageInfra) {
+            MO.state.villageInfra.unloadingBuilt = Boolean(built);
+        }
+        if (unloadingPadGroup) unloadingPadGroup.visible = Boolean(built);
+        MO.flushQueuedTruckIfReady();
+    };
+
+    MO.setStockYardsBuilt = function(built) {
+        if (MO.state && MO.state.villageInfra) {
+            MO.state.villageInfra.stockYardsBuilt = Boolean(built);
+        }
+        if (propsVisualGroup) propsVisualGroup.visible = Boolean(built);
+        beamRackGroup.visible = Boolean(built);
+    };
+
+    MO.flushQueuedTruckIfReady = function() {
+        const state = MO.state;
+        const s = state.site;
+        const infra = state.villageInfra;
+        if (!s || s.truckActive || !s.truckMesh) return;
+        if (state.unifiedVillage && infra && !(infra.roadBuilt && infra.unloadingBuilt)) return;
+        if (s.truckQueue.length > 0) {
+            startTruckRun(s.truckQueue.shift());
+        }
+    };
+
     MO.requestSupplyTruck = function(cargoKind = 'mixed') {
-        const s = MO.state.site;
+        const state = MO.state;
+        const s = state.site;
         if (!s.truckMesh) return;
+        const infra = state.villageInfra;
+        if (state.unifiedVillage && infra && !(infra.roadBuilt && infra.unloadingBuilt)) {
+            if (s.truckCargo !== cargoKind && !s.truckQueue.includes(cargoKind)) {
+                s.truckQueue.push(cargoKind);
+            }
+            return;
+        }
         if (s.truckActive) {
             if (s.truckCargo !== cargoKind && !s.truckQueue.includes(cargoKind)) {
                 s.truckQueue.push(cargoKind);
@@ -185,10 +253,11 @@
             supplies: 'areia, cimento e água',
             rebars: 'armaduras de aço',
             beams: 'vigas e tábuas',
+            wood: 'madeira bruta para bancada',
             mixed: 'materiais iniciais'
         };
         if (cargoKind !== 'mixed') {
-            MO.showToast(`🚚 Material acabou! Caminhão chegando com ${labels[cargoKind] || 'suprimentos'}...`, '🚚');
+            MO.showToast(`🚚 Caminhão entrando pela estrada com ${labels[cargoKind] || 'suprimentos'}...`, '🚚');
         }
         startTruckRun(cargoKind);
     };
@@ -206,11 +275,21 @@
         }
         if (s.truckActive && s.truckMesh) {
             s.truckProgress += dt * 0.34;
-            const z = 4.65;
-            const x = -7.6 + Math.sin(s.truckProgress * Math.PI) * 5.2;
+            const entry = MO.STATION_ROAD_ENTRY || { x: -13.6, z: 4.5 };
+            const unload = MO.STATION_UNLOAD || { x: -9.2, z: 3.4 };
+            const tLeg = s.truckProgress < 0.5 ? (s.truckProgress * 2) : ((1 - s.truckProgress) * 2);
+            const x = MO.state.unifiedVillage
+                ? (entry.x + (unload.x - entry.x) * tLeg)
+                : (-8.6 + Math.sin(s.truckProgress * Math.PI) * 5.8);
+            const z = MO.state.unifiedVillage
+                ? (entry.z + (unload.z - entry.z) * tLeg)
+                : 5.8;
             const y = Math.max(MO.WATER_LEVEL + 0.12, MO.getTerrainHeight(x, z));
             s.truckMesh.position.set(x, y, z);
-            const yaw = s.truckProgress < 0.5 ? 0 : Math.PI;
+            const dx = unload.x - entry.x;
+            const dz = unload.z - entry.z;
+            const forwardYaw = MO.state.unifiedVillage ? Math.atan2(dz, dx) : 0;
+            const yaw = s.truckProgress < 0.5 ? -forwardYaw : (-forwardYaw + Math.PI);
             s.truckMesh.rotation.y = yaw;
 
             tireTrackTimer += dt;
@@ -233,9 +312,12 @@
                     MO.spawnFallingRebars();
                 } else if (cargo === 'beams') {
                     MO.spawnBeamRack(false);
+                } else if (cargo === 'wood' && MO.deliverRawWood) {
+                    MO.deliverRawWood(8);
                 } else if (cargo === 'mixed') {
                     if (MO.restockSupplies) MO.restockSupplies(true);
                     MO.spawnBeamRack(true);
+                    if (MO.deliverRawWood) MO.deliverRawWood(8);
                 }
                 MO.spawnBurst(x, y + 0.5, z, 0xcbd5e1, 10, 0.08);
             }
@@ -243,10 +325,7 @@
             if (s.truckProgress >= 1) {
                 s.truckActive = false;
                 s.truckMesh.visible = false;
-                if (s.truckQueue.length > 0) {
-                    const nextCargo = s.truckQueue.shift();
-                    startTruckRun(nextCargo);
-                }
+                MO.flushQueuedTruckIfReady();
             }
         }
     };

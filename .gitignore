@@ -1,0 +1,13 @@
+# Sistema & Editores
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+.vscode/
+.idea/
+
+# Node / Ferramentas opcionais de teste
+node_modules/
+coverage/
+*.tmp
+*.bak

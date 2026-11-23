@@ -17,10 +17,10 @@
         const tanHalfV = Math.tan(halfFovRad);
         const tanHalfH = tanHalfV * aspect;
 
-        // Raio mínimo para enquadrar o diâmetro do diorama + estações (~9.8m de raio efetivo)
-        const minRadiusH = 10.2 / Math.max(0.22, tanHalfH);
-        const minRadiusV = 7.4 / Math.max(0.22, tanHalfV);
-        const radius = Math.max(23.5, Math.min(48.0, Math.max(minRadiusH, minRadiusV)));
+        // Raio mínimo para enquadrar o diâmetro do diorama + estações
+        const minRadiusH = (MO.DIORAMA_R + 1.4) / Math.max(0.22, tanHalfH);
+        const minRadiusV = (MO.DIORAMA_R * 0.80) / Math.max(0.22, tanHalfV);
+        const radius = Math.max(26.0, Math.min(62.0, Math.max(minRadiusH, minRadiusV)));
 
         // Em retrato desloca levemente o target para cima/baixo para centralizar entre HUD superior e dock inferior
         const targetY = isPortrait ? 0.85 : 0.55;
@@ -37,12 +37,19 @@
 
     const camOrbit = {
         radius: initialMetrics.radius,
+        targetRadius: initialMetrics.radius,
         theta: 0.22,
         phi: initialMetrics.isPortrait ? 0.90 : 0.86,
         target: new THREE.Vector3(0, initialMetrics.targetY, 0.2),
+        targetGoal: new THREE.Vector3(0, initialMetrics.targetY, 0.2),
         isDragging: false,
         prevX: 0,
         prevY: 0
+    };
+
+    MO.focusCameraOn = function(x = 0, z = 0.2, radiusOverride = null) {
+        camOrbit.targetGoal.set(x, getViewportMetrics().targetY, z);
+        camOrbit.targetRadius = radiusOverride !== null ? radiusOverride : getIdealRadius();
     };
 
     MO.scene = scene;
@@ -118,6 +125,11 @@
         bridge: new THREE.Group(),
         building: new THREE.Group(),
         tower: new THREE.Group(),
+        archivedConstructions: new THREE.Group(),
+        lotMarkers: new THREE.Group(),
+        toolbox: new THREE.Group(),
+        demarcation: new THREE.Group(),
+        workbench: new THREE.Group(),
         camp: new THREE.Group(),
         workers: new THREE.Group(),
         fx: new THREE.Group(),
@@ -142,11 +154,25 @@
     scene.add(brickHoverGhost);
     MO.brickHoverGhost = brickHoverGhost;
 
+    const burstGeo = new THREE.BoxGeometry(0.055, 0.055, 0.055);
+    const burstMats = new Map();
+    if (MO.resources) {
+        MO.resources.protect(
+            selectionPreview.geometry, selectionPreview.material,
+            brickHoverGhost.geometry, brickHoverGhost.material,
+            burstGeo
+        );
+    }
+
     MO.spawnBurst = function(x, y, z, colorHex, count = 10, spread = 0.07) {
-        const pMat = new THREE.MeshBasicMaterial({ color: colorHex });
-        const pGeo = new THREE.BoxGeometry(0.055, 0.055, 0.055);
+        let pMat = burstMats.get(colorHex);
+        if (!pMat) {
+            pMat = new THREE.MeshBasicMaterial({ color: colorHex });
+            burstMats.set(colorHex, pMat);
+            if (MO.resources) MO.resources.protect(pMat);
+        }
         for (let i = 0; i < count; i++) {
-            const m = new THREE.Mesh(pGeo, pMat);
+            const m = new THREE.Mesh(burstGeo, pMat);
             m.position.set(x + (Math.random() - 0.5) * 0.25, y, z + (Math.random() - 0.5) * 0.25);
             MO.groups.fx.add(m);
             MO.state.particles.push({
@@ -208,6 +234,16 @@
                 l.bulb.material.emissiveIntensity = state.isNight ? 2.0 : 1.3;
             });
         }
+        if (MO.worldManager && MO.worldManager.getNightLights) {
+            const archivedLights = MO.worldManager.getNightLights();
+            for (let i = 0; i < archivedLights.length; i++) {
+                const l = archivedLights[i];
+                if (l && l.light && l.bulb && l.bulb.material) {
+                    l.light.intensity = state.isNight ? 2.2 : 0.8;
+                    l.bulb.material.emissiveIntensity = state.isNight ? 2.0 : 0.8;
+                }
+            }
+        }
         if (state.mode === 'bridge' && state.bridge.lamps.length > 0) {
             state.bridge.lamps.forEach(lp => {
                 lp.light.intensity = nightGlow * 1.8;
@@ -230,7 +266,7 @@
 
     MO.toggleDayNightStep = function() {
         MO.state.timeOfDay = MO.state.isNight ? 0.22 : 0.78;
-        MO.updateAtmosphere(0, performance.now() * 0.001);
+        MO.updateAtmosphere(0, MO.simClock ? MO.simClock.simTime : performance.now() * 0.001);
         MO.showToast(MO.state.isNight ? '🌙 Anoiteceu no canteiro! Luzes acesas.' : '☀️ Amanheceu no canteiro!', MO.state.isNight ? '🌙' : '☀️');
     };
 })(window.MO = window.MO || {});

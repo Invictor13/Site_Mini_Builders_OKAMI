@@ -41,20 +41,22 @@
         return val;
     }
 
-    function sampleLevelWeight(x, z) {
+    function sampleMapWeight(mapArr, x, z) {
+        if (!mapArr) return 0;
         const u = ((x / (MO.DIORAMA_R * 2)) + 0.5) * (MO.LEVEL_RES - 1);
         const v = ((z / (MO.DIORAMA_R * 2)) + 0.5) * (MO.LEVEL_RES - 1);
         if (u < 0 || u >= MO.LEVEL_RES - 1 || v < 0 || v >= MO.LEVEL_RES - 1) return 0;
         const ix = Math.floor(u), iz = Math.floor(v);
         const fx = u - ix, fz = v - iz;
-        const w00 = MO.levelMap[iz * MO.LEVEL_RES + ix];
-        const w10 = MO.levelMap[iz * MO.LEVEL_RES + ix + 1];
-        const w01 = MO.levelMap[(iz + 1) * MO.LEVEL_RES + ix];
-        const w11 = MO.levelMap[(iz + 1) * MO.LEVEL_RES + ix + 1];
+        const w00 = mapArr[iz * MO.LEVEL_RES + ix];
+        const w10 = mapArr[iz * MO.LEVEL_RES + ix + 1];
+        const w01 = mapArr[(iz + 1) * MO.LEVEL_RES + ix];
+        const w11 = mapArr[(iz + 1) * MO.LEVEL_RES + ix + 1];
         return (w00 * (1 - fx) + w10 * fx) * (1 - fz) + (w01 * (1 - fx) + w11 * fx) * fz;
     }
 
-    function paintLevelWeight(wx, wz, radius, strength) {
+    function paintMapWeight(mapArr, wx, wz, radius, strength) {
+        if (!mapArr) return;
         for (let iz = 0; iz < MO.LEVEL_RES; iz++) {
             const z = ((iz / (MO.LEVEL_RES - 1)) - 0.5) * (MO.DIORAMA_R * 2);
             if (Math.abs(z - wz) > radius) continue;
@@ -65,57 +67,103 @@
                     const falloff = 1 - (dist / radius);
                     const smooth = falloff * falloff * (3 - 2 * falloff);
                     const idx = iz * MO.LEVEL_RES + ix;
-                    MO.levelMap[idx] = Math.min(1, MO.levelMap[idx] + smooth * strength);
+                    mapArr[idx] = Math.min(1, mapArr[idx] + smooth * strength);
                 }
             }
         }
     }
 
-    // FONTE ÚNICA DA VERDADE DE ELEVAÇÃO PARA TODOS OS 4 MODOS
+    function sampleLevelWeight(x, z) {
+        return sampleMapWeight(MO.levelMap, x, z);
+    }
+
+    function paintLevelWeight(wx, wz, radius, strength) {
+        paintMapWeight(MO.levelMap, wx, wz, radius, strength);
+    }
+
+    function sampleRoadWeight(x, z) {
+        return sampleMapWeight(MO.roadMap, x, z);
+    }
+
+    function paintRoadWeight(wx, wz, radius, strength) {
+        paintMapWeight(MO.roadMap, wx, wz, radius, strength);
+    }
+
+    function getRiverCenterX(z, seed) {
+        const s = seed !== undefined ? seed : MO.state.seed;
+        const baseShift = ((s % 5) - 2) * 0.35;
+        return 1.6 + baseShift + Math.sin(z * 0.28 + (s % 11)) * 0.55;
+    }
+
+    function getTowerHillCenter(seed) {
+        const s = seed !== undefined ? seed : MO.state.seed;
+        return {
+            x: 8.6 + (hash2D(19, 23, s) - 0.5) * 1.4,
+            z: -5.2 + (hash2D(29, 31, s) - 0.5) * 1.4
+        };
+    }
+
+    // FONTE ÚNICA DA VERDADE DE ELEVAÇÃO PARA O MAPA UNIFICADO DA VILA
     function getTerrainHeight(x, z) {
         const s = MO.state.seed;
         const mode = MO.state.mode;
-        let h = 0.22 + fbmNoise(x, z, s) * 0.95;
+        let h = 0.24 + fbmNoise(x, z, s) * 0.58;
 
-        if (mode === 'house') {
+        if (MO.state.unifiedVillage) {
+            // 1. Rio cortando de norte a sul, separando Margem Oeste e Margem Leste
+            const riverX = getRiverCenterX(z, s);
+            const riverDist = Math.abs(x - riverX);
+            if (riverDist < 2.55) {
+                const t = 1 - riverDist / 2.55;
+                h -= t * t * (3 - 2 * t) * 1.42;
+            } else if (riverDist < 3.8) {
+                // Margens ligeiramente firmes para apoiar cabeceiras da ponte
+                h = Math.max(0.28, h * 0.6 + 0.22);
+            }
+
+            // 2. Colina natural na Margem Leste para a Torre / Mirante
+            const hill = getTowerHillCenter(s);
+            const distHill = Math.hypot(x - hill.x, z - hill.z);
+            if (distHill < 4.4) {
+                const t = 1 - distHill / 4.4;
+                h += t * t * 0.72;
+            }
+
+            // 3. Aclive suave na borda norte
+            if (z < -7.5) {
+                h += Math.min(3.5, -7.5 - z) * 0.14;
+            }
+        } else if (mode === 'house') {
             const slopeDirX = (hash2D(1, 2, s) - 0.5) * 0.14;
             const slopeDirZ = -0.09 + (hash2D(3, 4, s) - 0.5) * 0.08;
             h += x * slopeDirX + z * slopeDirZ;
-
-            if (z < -4.2) {
-                h += Math.min(4.5, -4.2 - z) * 0.24;
-            }
-            const pondCenterX = 1.4 + (hash2D(7, 8, s) - 0.5) * 1.6;
-            const pondCenterZ = 5.8;
+            if (z < -4.2) h += Math.min(4.5, -4.2 - z) * 0.24;
+            const pondCenterX = 2.6 + (hash2D(7, 8, s) - 0.5) * 1.6;
+            const pondCenterZ = 7.4;
             const pondDist = Math.hypot((x - pondCenterX) * 0.72, (z - pondCenterZ) * 1.15);
-            if (pondDist < 3.6) {
-                const t = 1 - pondDist / 3.6;
+            if (pondDist < 3.4) {
+                const t = 1 - pondDist / 3.4;
                 h -= t * t * (3 - 2 * t) * 1.35;
             }
         } else if (mode === 'bridge') {
-            // Canal profundo do rio cortando de norte a sul (eixo Z), com duas margens firmes em X
             const meander = Math.sin(z * 0.35 + (s % 10)) * 0.45;
             const riverDist = Math.abs(x - meander);
             if (riverDist < 3.25) {
                 const t = 1 - riverDist / 3.25;
                 h -= t * t * (3 - 2 * t) * 1.55;
             } else {
-                // Margens elevadas para apoiar as cabeceiras da ponte
                 h = 0.42 + fbmNoise(x, z, s) * 0.45;
             }
             if (z < -4.8) h += Math.min(3.5, -4.8 - z) * 0.20;
         } else if (mode === 'building') {
-            // Terreno urbano com leve aclive ao fundo
             h = 0.26 + fbmNoise(x, z, s) * 0.55 - z * 0.04;
             if (z < -4.6) h += Math.min(3.2, -4.6 - z) * 0.18;
         } else if (mode === 'tower') {
-            // Platô de colina central rochosa para destacar a torre
             const distC = Math.hypot(x, z);
             if (distC < 4.5) {
                 const t = 1 - distC / 4.5;
                 h += t * t * 0.55;
             }
-            // Pequeno lago ao fundo-direito para reflexo
             const pd = Math.hypot(x - 4.8, z - 4.6);
             if (pd < 2.6) {
                 const t = 1 - pd / 2.6;
@@ -123,16 +171,19 @@
             }
         }
 
-        // Suavização leve nas estações laterais
-        const dMix = Math.hypot(x - MO.STATION_MIXER.x, z - MO.STATION_MIXER.z);
-        if (dMix < 2.2) {
-            const t = 1 - dMix / 2.2;
-            h = h * (1 - t * 0.65) + Math.max(0.22, h) * (t * 0.65);
-        }
-        const dBrk = Math.hypot(x - MO.STATION_BRICK.x, z - MO.STATION_BRICK.z);
-        if (dBrk < 2.0) {
-            const t = 1 - dBrk / 2.0;
-            h = h * (1 - t * 0.65) + Math.max(0.22, h) * (t * 0.65);
+        // Suavização leve nos pontos de apoio (Caixa de Ferramentas, Masseira, Bancada, Descarga)
+        [MO.STATION_TOOLBOX, MO.STATION_UNLOAD, MO.STATION_MIXER, MO.STATION_WORKBENCH, MO.STATION_BRICK].forEach(st => {
+            if (!st) return;
+            const d = Math.hypot(x - st.x, z - st.z);
+            if (d < 2.0) {
+                const t = 1 - d / 2.0;
+                h = h * (1 - t * 0.65) + Math.max(0.24, h) * (t * 0.65);
+            }
+        });
+
+        const rw = sampleRoadWeight(x, z);
+        if (rw > 0.001) {
+            h = h * (1 - rw * 0.8) + (MO.PLATEAU_Y + 0.03) * (rw * 0.8);
         }
 
         const lw = sampleLevelWeight(x, z);
@@ -147,6 +198,10 @@
     MO.hash2D = hash2D;
     MO.sampleLevelWeight = sampleLevelWeight;
     MO.paintLevelWeight = paintLevelWeight;
+    MO.sampleRoadWeight = sampleRoadWeight;
+    MO.paintRoadWeight = paintRoadWeight;
+    MO.getRiverCenterX = getRiverCenterX;
+    MO.getTowerHillCenter = getTowerHillCenter;
     MO.getTerrainHeight = getTerrainHeight;
 
     MO.createDioramaBase = function() {
@@ -230,12 +285,28 @@
         MO.waterSurfaceMesh.position.y = MO.WATER_LEVEL + 0.02;
         MO.waterSurfaceMesh.receiveShadow = true;
         dioramaGroup.add(MO.waterSurfaceMesh);
+
+        if (MO.resources) {
+            MO.resources.protect(
+                woodBase.geometry,
+                slateRing.geometry,
+                MO.waterTex,
+                MO.waterSurfaceMesh.geometry,
+                MO.waterSurfaceMesh.material
+            );
+        }
     };
 
     MO.createProceduralTerrainMesh = function() {
         const dioramaGroup = MO.groups.diorama;
-        if (MO.terrainMesh) dioramaGroup.remove(MO.terrainMesh);
-        if (MO.terrainSkirtMesh) dioramaGroup.remove(MO.terrainSkirtMesh);
+        if (MO.terrainMesh) {
+            MO.resources.removeAndDispose(dioramaGroup, MO.terrainMesh);
+            MO.terrainMesh = null;
+        }
+        if (MO.terrainSkirtMesh) {
+            MO.resources.removeAndDispose(dioramaGroup, MO.terrainSkirtMesh);
+            MO.terrainSkirtMesh = null;
+        }
 
         const SEG = 60;
         const geo = new THREE.BufferGeometry();
@@ -315,6 +386,7 @@
     const cGrassDark = new THREE.Color('#344528');
     const cGrassLight = new THREE.Color('#465934');
     const cEarthPad = new THREE.Color('#7a654d');
+    const cRoadDirt = new THREE.Color('#6b533b');
     const cPondBed = new THREE.Color('#1d2a2d');
     const cRockSlope = new THREE.Color('#52544f');
     const tmpColor = new THREE.Color();
@@ -341,6 +413,7 @@
             pos.setY(i, h);
 
             const lw = sampleLevelWeight(x, z);
+            const rw = sampleRoadWeight(x, z);
             if (h < MO.WATER_LEVEL + 0.08) {
                 const t = Math.max(0, Math.min(1, (MO.WATER_LEVEL + 0.08 - h) / 0.45));
                 tmpColor.copy(cEarthPad).lerp(cPondBed, t);
@@ -349,6 +422,7 @@
                 tmpColor.copy(cGrassDark).lerp(cGrassLight, n);
                 if (h > 1.05 || state.mode === 'tower') tmpColor.lerp(cRockSlope, Math.min(0.45, Math.max(0, (h - 0.75) * 0.7)));
                 if (lw > 0.05) tmpColor.lerp(cEarthPad, Math.min(0.92, lw * 1.15));
+                if (rw > 0.04) tmpColor.lerp(cRoadDirt, Math.min(0.94, rw * 1.2));
             }
             col.setXYZ(i, tmpColor.r, tmpColor.g, tmpColor.b);
         }
@@ -378,25 +452,36 @@
     };
 
     MO.updateTerrainGridLines = function() {
-        if (MO.terrainGridLines) MO.scene.remove(MO.terrainGridLines);
+        if (MO.terrainGridLines) {
+            MO.resources.removeAndDispose(MO.scene, MO.terrainGridLines);
+            MO.terrainGridLines = null;
+        }
         if (MO.state.mode !== 'house' || MO.state.phase > 1) return;
 
         const pts = [];
         const half = MO.GRID_SIZE / 2;
+        const activeLot = (MO.regionManager && MO.worldManager && MO.worldManager.meta.persistentGrowth)
+            ? MO.regionManager.getActiveLot()
+            : null;
+        const minX = activeLot ? (activeLot.originX - activeLot.halfW) : -half;
+        const maxX = activeLot ? (activeLot.originX + activeLot.halfW) : half;
+        const minZ = activeLot ? (activeLot.originZ - activeLot.halfD) : (-half + MO.GRID_OFFSET_Z);
+        const maxZ = activeLot ? (activeLot.originZ + activeLot.halfD) : (half + MO.GRID_OFFSET_Z);
+        const spanX = maxX - minX;
+        const spanZ = maxZ - minZ;
         const step = 0.25;
-        for (let gx = 0; gx <= MO.GRID_SIZE; gx++) {
-            const wx = gx - half;
-            for (let s = 0; s < MO.GRID_SIZE / step; s++) {
-                const z1 = -half + s * step + MO.GRID_OFFSET_Z;
+
+        for (let wx = minX; wx <= maxX + 1e-4; wx += 1) {
+            for (let s = 0; s < spanZ / step; s++) {
+                const z1 = minZ + s * step;
                 const z2 = z1 + step;
                 pts.push(wx, getTerrainHeight(wx, z1) + 0.03, z1);
                 pts.push(wx, getTerrainHeight(wx, z2) + 0.03, z2);
             }
         }
-        for (let gz = 0; gz <= MO.GRID_SIZE; gz++) {
-            const wz = gz - half + MO.GRID_OFFSET_Z;
-            for (let s = 0; s < MO.GRID_SIZE / step; s++) {
-                const x1 = -half + s * step;
+        for (let wz = minZ; wz <= maxZ + 1e-4; wz += 1) {
+            for (let s = 0; s < spanX / step; s++) {
+                const x1 = minX + s * step;
                 const x2 = x1 + step;
                 pts.push(x1, getTerrainHeight(x1, wz) + 0.03, wz);
                 pts.push(x2, getTerrainHeight(x2, wz) + 0.03, wz);
@@ -490,15 +575,16 @@
         const natureGroup = MO.groups.nature;
         const splatGroup = MO.groups.splat;
         MO.state.site.swayingTrees = [];
-        while (natureGroup.children.length > 0) natureGroup.remove(natureGroup.children[0]);
-        while (splatGroup.children.length > 0) splatGroup.remove(splatGroup.children[0]);
+        MO.resources.clearGroup(natureGroup);
+        MO.resources.clearGroup(splatGroup);
 
         const s = MO.state.seed;
-        for (let i = 0; i < 14; i++) {
-            const ang = (i / 14) * Math.PI * 2 + hash2D(i, 11, s) * 0.35;
-            const dist = 6.2 + hash2D(i, 22, s) * 2.2;
+        for (let i = 0; i < 22; i++) {
+            const ang = (i / 22) * Math.PI * 2 + hash2D(i, 11, s) * 0.35;
+            const dist = (MO.DIORAMA_R - 2.6) + hash2D(i, 22, s) * 1.9;
             const tx = Math.cos(ang) * dist;
             const tz = Math.sin(ang) * dist;
+            if (MO.STATION_ROAD_ENTRY && Math.hypot(tx - MO.STATION_ROAD_ENTRY.x, tz - MO.STATION_ROAD_ENTRY.z) < 2.5) continue;
             if (Math.hypot(tx - MO.STATION_MIXER.x, tz - MO.STATION_MIXER.z) < 2.2) continue;
             if (Math.hypot(tx - MO.STATION_BRICK.x, tz - MO.STATION_BRICK.z) < 2.0) continue;
             if (Math.hypot(tx - MO.STATION_REBAR.x, tz - MO.STATION_REBAR.z) < 1.9) continue;
@@ -507,13 +593,14 @@
             createRealisticTree(tx, tz, scale, hash2D(i, 44, s) > 0.45);
         }
 
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < 22; i++) {
             const ang = hash2D(i, 55, s) * Math.PI * 2;
-            const dist = 4.6 + hash2D(i, 66, s) * 3.8;
+            const dist = 9.5 + hash2D(i, 66, s) * 4.2;
             const rx = Math.cos(ang) * dist;
             const rz = Math.sin(ang) * dist;
             const ry = getTerrainHeight(rx, rz);
-            if (Math.abs(rx) < 4.8 && rz > -5.5 && rz < 3.6) continue;
+            if (ry < MO.WATER_LEVEL + 0.14) continue;
+            if (Math.abs(rx) < 8.5 && rz > -7.5 && rz < 5.5) continue;
             const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22 + hash2D(i, 77, s) * 0.25, 0), MO.mats.stone);
             rock.position.set(rx, ry + 0.03, rz);
             rock.scale.set(1.3, 0.65, 1.1);
@@ -554,6 +641,8 @@
 
     const trackGeo = new THREE.PlaneGeometry(0.14, 0.22);
     const tireTrackGeo = new THREE.PlaneGeometry(0.22, 0.36);
+    const rippleRingGeo = new THREE.RingGeometry(0.10, 0.17, 18);
+    if (MO.resources) MO.resources.protect(trackGeo, tireTrackGeo, rippleRingGeo);
 
     MO.spawnGroundTrack = function(x, z, kind = 'boot', yaw = 0) {
         const state = MO.state;
@@ -595,7 +684,7 @@
         state.site.tracks.push({ mesh: m, mat, life: maxLife, maxLife, startOp: mat.opacity });
         if (state.site.tracks.length > 90) {
             const old = state.site.tracks.shift();
-            MO.groups.fx.remove(old.mesh);
+            MO.resources.removeAndDispose(MO.groups.fx, old.mesh);
         }
     };
 
@@ -608,7 +697,7 @@
             depthWrite: false,
             side: THREE.DoubleSide
         });
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.10, 0.17, 18), ringMat);
+        const ring = new THREE.Mesh(rippleRingGeo, ringMat);
         ring.rotation.x = -Math.PI / 2;
         ring.position.set(x, MO.WATER_LEVEL + 0.048, z);
         MO.groups.fx.add(ring);
@@ -624,7 +713,7 @@
         });
         if (state.site.ripples.length > 18) {
             const old = state.site.ripples.shift();
-            if (old.ring) MO.groups.fx.remove(old.ring);
+            if (old.ring) MO.resources.removeAndDispose(MO.groups.fx, old.ring);
         }
 
         if (strength >= 0.65) {
@@ -642,7 +731,7 @@
             const tr = tracks[i];
             tr.life -= dt;
             if (tr.life <= 0) {
-                MO.groups.fx.remove(tr.mesh);
+                MO.resources.removeAndDispose(MO.groups.fx, tr.mesh);
                 tracks.splice(i, 1);
             } else {
                 tr.mat.opacity = tr.startOp * (tr.life / tr.maxLife);
@@ -656,7 +745,7 @@
             rp.age += dt;
             const prog = rp.age / rp.maxAge;
             if (prog >= 1) {
-                if (rp.ring) MO.groups.fx.remove(rp.ring);
+                if (rp.ring) MO.resources.removeAndDispose(MO.groups.fx, rp.ring);
                 ripples.splice(i, 1);
             } else if (rp.ring) {
                 const sc = 1 + prog * 7.5 * rp.strength;
@@ -704,7 +793,7 @@
     MO.populateBuildableLotWeeds = function() {
         const weedsGroup = MO.groups.weeds;
         const state = MO.state;
-        while (weedsGroup.children.length > 0) weedsGroup.remove(weedsGroup.children[0]);
+        MO.resources.clearGroup(weedsGroup);
         state.weeds = [];
         state.levelTargets = [];
 
@@ -716,7 +805,10 @@
             new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.92, flatShading: true })
         ];
 
-        const maxWeeds = mode === 'bridge' ? 16 : 22;
+        const activeLot = (mode === 'house' && MO.regionManager && MO.worldManager && MO.worldManager.meta.persistentGrowth)
+            ? MO.regionManager.getActiveLot()
+            : null;
+        const maxWeeds = mode === 'bridge' ? 16 : (activeLot ? 12 : 22);
         for (let i = 0; i < maxWeeds; i++) {
             let wx, wz;
             if (mode === 'bridge') {
@@ -726,6 +818,9 @@
             } else if (mode === 'tower') {
                 wx = (hash2D(i, 301, s) - 0.5) * 5.2;
                 wz = (hash2D(i, 302, s) - 0.5) * 5.2;
+            } else if (activeLot) {
+                wx = activeLot.originX + (hash2D(i, 301, s + activeLot.id.length) - 0.5) * (activeLot.halfW * 1.8);
+                wz = activeLot.originZ + (hash2D(i, 302, s + activeLot.id.length) - 0.5) * (activeLot.halfD * 1.8);
             } else {
                 wx = (hash2D(i, 301, s) - 0.5) * 6.8;
                 wz = -3.6 + hash2D(i, 302, s) * 5.4;
@@ -785,6 +880,17 @@
             [-1.6, 0, 1.6].forEach(tx => {
                 [-1.6, 0, 1.6].forEach(tz => state.levelTargets.push({ x: tx, z: tz, done: false, res: false }));
             });
+        } else if (activeLot) {
+            for (let ox = -1.2; ox <= 1.2; ox += 1.2) {
+                for (let oz = -1.2; oz <= 1.2; oz += 1.2) {
+                    state.levelTargets.push({
+                        x: activeLot.originX + ox,
+                        z: activeLot.originZ + oz,
+                        done: false,
+                        res: false
+                    });
+                }
+            }
         } else {
             for (let x = -2.4; x <= 2.4; x += 1.6) {
                 for (let z = -3.0; z <= 1.5; z += 1.5) {

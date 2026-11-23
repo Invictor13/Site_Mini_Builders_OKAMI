@@ -70,6 +70,8 @@
         window.addEventListener('keydown', (e) => {
             if (e.key === 'h' || e.key === 'H') {
                 MO.toggleZenMode();
+            } else if (e.key === 'p' || e.key === 'P') {
+                if (MO.diagnostics) MO.diagnostics.toggle();
             } else if (e.key === 'Escape' && state.zenMode) {
                 MO.toggleZenMode(false);
             }
@@ -422,7 +424,13 @@
                     const fHits = raycaster.intersectObjects(MO.groups.floor.children);
                     for (let h of fHits) {
                         const ft = h.object.userData.floorTile;
-                        if (ft && ft.concreted) { ft.concreted = false; MO.groups.floor.remove(ft.slabMesh); ft.hitbox.visible = true; return; }
+                        if (ft && ft.concreted) {
+                            ft.concreted = false;
+                            MO.resources.removeAndDispose(MO.groups.floor, ft.slabMesh);
+                            ft.slabMesh = null;
+                            ft.hitbox.visible = true;
+                            return;
+                        }
                     }
                     return;
                 }
@@ -522,7 +530,7 @@
                     const mHits = raycaster.intersectObjects(MO.groups.mep.children);
                     if (mHits.length > 0 && mHits[0].object.userData.mepNode) {
                         const nd = mHits[0].object.userData.mepNode;
-                        MO.groups.mep.remove(nd.mesh);
+                        MO.resources.removeAndDispose(MO.groups.mep, nd.mesh);
                         state.elecNodes = state.elecNodes.filter(n => n !== nd);
                         state.plumbNodes = state.plumbNodes.filter(n => n !== nd);
                         MO.showToast('Ponto MEP removido!', '🗑️');

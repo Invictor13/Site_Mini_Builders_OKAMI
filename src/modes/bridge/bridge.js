@@ -3,12 +3,25 @@
 // =========================================================================
 (function(MO) {
     const BRIDGE_Y = 1.05;
-    const SPAN_X = [-4.2, -1.8, 1.8, 4.2];
+
+    function getBridgeOrigin() {
+        if (MO.state && MO.state.unifiedVillage && MO.worldManager && MO.worldManager.getActiveLotOrigin) {
+            return MO.worldManager.getActiveLotOrigin();
+        }
+        return { x: 0, z: 0 };
+    }
 
     function buildBridgeSceneMarkers() {
         const bg = MO.groups.bridge;
         const br = MO.state.bridge;
-        while (bg.children.length > 0) bg.remove(bg.children[0]);
+        MO.resources.clearGroup(bg);
+
+        const origin = getBridgeOrigin();
+        const ox = origin.x;
+        const oz = origin.z;
+        const spanX = [ox - 3.8, ox - 1.5, ox + 1.5, ox + 3.8];
+        br.originX = ox;
+        br.originZ = oz;
 
         const variants = ['girder', 'cable-stayed', 'arch'];
         MO.state.variant = variants[MO.state.seed % variants.length];
@@ -24,10 +37,10 @@
         br.truckProgress = 0;
         br.loadPassed = false;
 
-        [-4.2, 4.2].forEach((ax, idx) => {
-            const ty = MO.getTerrainHeight(ax, 0);
+        [spanX[0], spanX[3]].forEach((ax, idx) => {
+            const ty = MO.getTerrainHeight(ax, oz);
             const g = new THREE.Group();
-            g.position.set(ax, ty, 0);
+            g.position.set(ax, ty, oz);
 
             const guide = new THREE.Mesh(
                 new THREE.BoxGeometry(0.95, 0.12, 2.2),
@@ -38,17 +51,17 @@
 
             const hit = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.5, 2.3), new THREE.MeshBasicMaterial({ visible: false }));
             hit.position.y = 0.6;
-            const ab = { id: idx, x: ax, z: 0, built: false, res: false, group: g, guide, hitbox: hit };
+            const ab = { id: idx, x: ax, z: oz, built: false, res: false, group: g, guide, hitbox: hit };
             hit.userData = { bridgeItem: ab, kind: 'abutment' };
             g.add(hit);
             bg.add(g);
             br.abutments.push(ab);
         });
 
-        [-1.8, 1.8].forEach((px, idx) => {
-            const bedY = MO.getTerrainHeight(px, 0);
+        [spanX[1], spanX[2]].forEach((px, idx) => {
+            const bedY = MO.getTerrainHeight(px, oz);
             const g = new THREE.Group();
-            g.position.set(px, 0, 0);
+            g.position.set(px, 0, oz);
 
             const ring = new THREE.Mesh(
                 new THREE.RingGeometry(0.45, 0.62, 16),
@@ -61,7 +74,7 @@
             const hit = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.4, 2.2), new THREE.MeshBasicMaterial({ visible: false }));
             hit.position.y = 0.4;
             const pier = {
-                id: idx, x: px, z: 0, bedY,
+                id: idx, x: px, z: oz, bedY,
                 piled: false, hasCofferdam: false, concreted: false, res: false,
                 group: g, ring, hitbox: hit, cofferMesh: null, concreteMesh: null
             };
@@ -72,8 +85,8 @@
         });
 
         for (let s = 0; s < 3; s++) {
-            const x1 = SPAN_X[s];
-            const x2 = SPAN_X[s + 1];
+            const x1 = spanX[s];
+            const x2 = spanX[s + 1];
             const cx = (x1 + x2) / 2;
             const len = x2 - x1;
 
@@ -84,15 +97,15 @@
                 new THREE.BoxGeometry(len - 0.15, 0.10, 1.9),
                 new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16, depthWrite: false })
             );
-            guide.position.set(cx, BRIDGE_Y, 0);
+            guide.position.set(cx, BRIDGE_Y, oz);
             guide.visible = false;
             spanGrp.add(guide);
 
             const hit = new THREE.Mesh(new THREE.BoxGeometry(len, 0.8, 2.1), new THREE.MeshBasicMaterial({ visible: false }));
-            hit.position.set(cx, BRIDGE_Y + 0.1, 0);
+            hit.position.set(cx, BRIDGE_Y + 0.1, oz);
 
             const spanObj = {
-                id: s, x1, x2, cx, len,
+                id: s, x1, x2, cx, cz: oz, len,
                 hasGirder: false, hasDeck: false, hasRails: false, res: false,
                 spanGrp, guide, hitbox: hit, girderGroup: null, deckMesh: null, railsGroup: null
             };
@@ -373,11 +386,13 @@
             return;
         }
         if (br.truckTesting) return;
+        const ox = br.originX || 0;
+        const oz = br.originZ || 0;
         br.truckTesting = true;
         br.truckProgress = 0;
         br.truck.visible = true;
         br.truck.rotation.z = 0;
-        br.truck.position.set(-5.2, BRIDGE_Y + 0.17, 0);
+        br.truck.position.set(ox - 4.8, BRIDGE_Y + 0.17, oz);
         MO.SoundFX.playTruckHorn();
         MO.showToast('🚚 Teste de Carga em andamento — caminhão pesado atravessando!', '🚚');
     };
@@ -387,8 +402,10 @@
         const br = state.bridge;
         if (!br.truckTesting || !br.truck) return;
 
+        const ox = br.originX || 0;
+        const oz = br.originZ || 0;
         br.truckProgress += dt * 0.24;
-        const x = -5.2 + br.truckProgress * 10.4;
+        const x = (ox - 4.8) + br.truckProgress * 9.6;
         const wobble = Math.sin(br.truckProgress * 45) * 0.008;
 
         // Verifica se a ponte deve ceder no centro (pilares incompletos OU falha estrutural realista)
@@ -402,20 +419,26 @@
                 centerSpan.spanGrp.position.y = -0.78;
                 centerSpan.spanGrp.rotation.z = -0.14;
             }
-            br.truck.position.set(0, MO.WATER_LEVEL + 0.22, 0);
+            br.truck.position.set(ox, MO.WATER_LEVEL + 0.22, oz);
             br.truck.rotation.z = -0.35;
-            MO.spawnBurst(0, MO.WATER_LEVEL + 0.15, 0, 0xbae6fd, 22, 0.16);
-            if (MO.spawnWaterRipple) MO.spawnWaterRipple(0, 0, 2.2, true);
-            MO.triggerStructuralCollapse(!piersOk ? 'PILARES SUBMERSOS INCOMPLETOS' : 'LOTE DE CONCRETO CEDEU NO VÃO CENTRAL', { x: 0, y: BRIDGE_Y, z: 0 });
+            MO.spawnBurst(ox, MO.WATER_LEVEL + 0.15, oz, 0xbae6fd, 22, 0.16);
+            if (MO.spawnWaterRipple) MO.spawnWaterRipple(ox, oz, 2.2, true);
+            MO.triggerStructuralCollapse(!piersOk ? 'PILARES SUBMERSOS INCOMPLETOS' : 'LOTE DE CONCRETO CEDEU NO VÃO CENTRAL', { x: ox, y: BRIDGE_Y, z: oz });
             return;
         }
 
-        br.truck.position.set(x, BRIDGE_Y + 0.17 + wobble, 0);
+        br.truck.position.set(x, BRIDGE_Y + 0.17 + wobble, oz);
         if (br.truckProgress >= 1) {
             br.truckTesting = false;
             br.loadPassed = true;
+            if (state.villageInfra) {
+                state.villageInfra.bridgeUnlocked = true;
+                if (MO.worldManager && MO.worldManager.demarcateEastRoads) {
+                    MO.worldManager.demarcateEastRoads();
+                }
+            }
             MO.approveStructure('✅ TESTE DE CARGA APROVADO · PONTE LIBERADA');
-            MO.showToast('✅ Teste de Carga APROVADO! Ponte liberada ao tráfego!', '🏆');
+            MO.showToast('✅ Ponte liberada ao tráfego! Margem Leste do rio destravada!', '🏆');
         }
     };
 
@@ -470,26 +493,36 @@
         assignWorkerTask(w, setWorkerTool) {
             const state = MO.state;
             const br = state.bridge;
+            const ox = br.originX || 0;
+            const oz = br.originZ || 0;
+            const westApproachX = ox - 2.9;
 
             if (state.phase === 1) {
                 const ab = br.abutments.find(a => !a.built && !a.res);
-                if (ab) { ab.res = true; w.task = { type: 'br-abut', item: ab, duration: 0.6 }; w.tx = ab.x; w.tz = 0.8; setWorkerTool(w.rig, 'trowel'); return true; }
+                if (ab) {
+                    ab.res = true;
+                    w.task = { type: 'br-abut', item: ab, duration: 0.6 };
+                    w.tx = (state.unifiedVillage && ab.x > ox) ? westApproachX : ab.x;
+                    w.tz = oz + 0.8;
+                    setWorkerTool(w.rig, 'trowel');
+                    return true;
+                }
                 const p1 = br.piers.find(p => !p.piled && !p.res);
-                if (p1) { p1.res = true; w.task = { type: 'br-pile', item: p1, duration: 0.65 }; w.tx = p1.x < 0 ? -3.1 : 3.1; w.tz = 0; setWorkerTool(w.rig, 'hammer'); return true; }
+                if (p1) { p1.res = true; w.task = { type: 'br-pile', item: p1, duration: 0.65 }; w.tx = westApproachX; w.tz = oz; setWorkerTool(w.rig, 'hammer'); return true; }
                 const p2 = br.piers.find(p => p.piled && !p.hasCofferdam && !p.res);
-                if (p2) { p2.res = true; w.task = { type: 'br-coffer', item: p2, duration: 0.6 }; w.tx = p2.x < 0 ? -3.1 : 3.1; w.tz = 0.7; setWorkerTool(w.rig, 'plank'); return true; }
+                if (p2) { p2.res = true; w.task = { type: 'br-coffer', item: p2, duration: 0.6 }; w.tx = westApproachX; w.tz = oz + 0.7; setWorkerTool(w.rig, 'plank'); return true; }
                 const p3 = br.piers.find(p => p.hasCofferdam && !p.concreted && !p.res);
-                if (p3) { p3.res = true; w.task = { type: 'br-pour', item: p3, duration: 0.6 }; w.tx = p3.x < 0 ? -3.1 : 3.1; w.tz = -0.7; setWorkerTool(w.rig, 'trowel'); return true; }
+                if (p3) { p3.res = true; w.task = { type: 'br-pour', item: p3, duration: 0.6 }; w.tx = westApproachX; w.tz = oz - 0.7; setWorkerTool(w.rig, 'trowel'); return true; }
             }
             if (state.phase === 2) {
                 const g1 = br.girders.find(s => !s.hasGirder && !s.res);
-                if (g1) { g1.res = true; w.task = { type: 'br-girder', item: g1, duration: 0.7 }; w.tx = g1.x1; w.tz = 0.9; setWorkerTool(w.rig, 'hammer'); return true; }
+                if (g1) { g1.res = true; w.task = { type: 'br-girder', item: g1, duration: 0.7 }; w.tx = westApproachX; w.tz = oz + 0.9; setWorkerTool(w.rig, 'hammer'); return true; }
                 const d1 = br.girders.find(s => s.hasGirder && !s.hasDeck && !s.res);
-                if (d1) { d1.res = true; w.task = { type: 'br-deck', item: d1, duration: 0.65 }; w.tx = d1.cx < 0 ? -3.3 : 3.3; w.tz = 0; setWorkerTool(w.rig, 'trowel'); return true; }
+                if (d1) { d1.res = true; w.task = { type: 'br-deck', item: d1, duration: 0.65 }; w.tx = westApproachX; w.tz = oz; setWorkerTool(w.rig, 'trowel'); return true; }
             }
             if (state.phase === 3) {
                 const r1 = br.girders.find(s => s.hasDeck && !s.hasRails && !s.res);
-                if (r1) { r1.res = true; w.task = { type: 'br-rail', item: r1, duration: 0.55 }; w.tx = r1.cx < 0 ? -3.4 : 3.4; w.tz = 0.8; setWorkerTool(w.rig, 'hammer'); return true; }
+                if (r1) { r1.res = true; w.task = { type: 'br-rail', item: r1, duration: 0.55 }; w.tx = westApproachX; w.tz = oz + 0.8; setWorkerTool(w.rig, 'hammer'); return true; }
             }
             return false;
         },

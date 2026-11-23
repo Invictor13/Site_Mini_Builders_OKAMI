@@ -21,7 +21,7 @@
         MO.state.events.timer = 9 + Math.random() * 6;
         MO.state.events.active = null;
         MO.state.site.debris = [];
-        while (collapseGroup.children.length > 0) collapseGroup.remove(collapseGroup.children[0]);
+        MO.resources.clearGroup(collapseGroup);
         MO.updateLaudoBadge(null);
     };
 

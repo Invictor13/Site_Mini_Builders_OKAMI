@@ -2,12 +2,23 @@
 // MODO 4: TORRE TRELIÇADA / FAROL / TELECOM (VARIANTES & TESTE DE VENTO)
 // =========================================================================
 (function(MO) {
-    const TOWER_Z = -0.3;
+    function getTowerOrigin() {
+        if (MO.state && MO.state.unifiedVillage && MO.worldManager && MO.worldManager.getActiveLotOrigin) {
+            return MO.worldManager.getActiveLotOrigin();
+        }
+        return { x: 0, z: -0.3 };
+    }
 
     function buildTowerSkeleton() {
         const tg = MO.groups.tower;
         const tw = MO.state.tower;
-        while (tg.children.length > 0) tg.remove(tg.children[0]);
+        MO.resources.clearGroup(tg);
+
+        const origin = getTowerOrigin();
+        const ox = origin.x;
+        const oz = origin.z;
+        tw.originX = ox;
+        tw.originZ = oz;
 
         const variants = ['lattice', 'telecom', 'lighthouse'];
         MO.state.variant = variants[MO.state.seed % variants.length];
@@ -23,9 +34,9 @@
         tw.windAmplitude = 0;
         tw.windPassed = false;
 
-        const baseY = MO.getTerrainHeight(0, TOWER_Z);
+        const baseY = MO.getTerrainHeight(ox, oz);
         const pivot = new THREE.Group();
-        pivot.position.set(0, baseY, TOWER_Z);
+        pivot.position.set(ox, baseY, oz);
         tg.add(pivot);
         tw.towerPivot = pivot;
 
@@ -46,7 +57,7 @@
             const hit = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.9), new THREE.MeshBasicMaterial({ visible: false }));
             hit.position.y = 0.5;
             const ftObj = {
-                id: idx, x: fx, z: TOWER_Z + fz, localX: fx, localZ: fz,
+                id: idx, x: ox + fx, z: oz + fz, localX: fx, localZ: fz,
                 dug: false, hasRebar: false, concreted: false, res: false,
                 group: g, ring, hitbox: hit
             };
@@ -58,8 +69,9 @@
 
         const tierH = 1.35;
         const radii = [1.15, 0.94, 0.74, 0.56, 0.40];
-        const redMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45, metalness: 0.35 });
-        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.45, metalness: 0.25 });
+        const usesBicolor = MO.state.variant === 'lighthouse' || MO.state.variant === 'telecom';
+        const redMat = usesBicolor ? new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45, metalness: 0.35 }) : null;
+        const whiteMat = usesBicolor ? new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.45, metalness: 0.25 }) : null;
 
         for (let t = 0; t < 4; t++) {
             const y0 = 0.2 + t * tierH;
@@ -283,11 +295,13 @@
             const footingsOk = tw.footings.every(f => f.concreted);
             const shouldFail = !footingsOk || (state.riskProfile === 'realistic' && state.structural.integrity < 72 && !state.structural.repairedOnce);
 
+            const ox = tw.originX || 0;
+            const oz = tw.originZ !== undefined ? tw.originZ : -0.3;
             tw.windPhase += dt * 9.5;
             if (shouldFail && tw.windPhase > 3.5 && !state.structural.collapsed) {
                 tw.windTesting = false;
                 tw.towerPivot.rotation.z = 0.48;
-                MO.triggerStructuralCollapse(!footingsOk ? 'SAPATAS SEM CONCRETO CEDERAM AO VENTO' : 'ANEL DE ANCORAGEM ROMPEU NA RAJADA', { x: 0, y: 2.8, z: TOWER_Z });
+                MO.triggerStructuralCollapse(!footingsOk ? 'SAPATAS SEM CONCRETO CEDERAM AO VENTO' : 'ANEL DE ANCORAGEM ROMPEU NA RAJADA', { x: ox, y: 2.8, z: oz });
                 return;
             }
 
@@ -295,7 +309,7 @@
             tw.towerPivot.rotation.z = Math.sin(tw.windPhase) * tw.windAmplitude;
 
             if (Math.random() < 0.45) {
-                MO.spawnBurst(-2.4, 2.5 + Math.random() * 2.5, TOWER_Z + (Math.random() - 0.5) * 1.5, 0xbae6fd, 2, 0.14);
+                MO.spawnBurst(ox - 2.4, 2.5 + Math.random() * 2.5, oz + (Math.random() - 0.5) * 1.5, 0xbae6fd, 2, 0.14);
             }
 
             if (tw.windAmplitude < 0.0025) {
@@ -335,6 +349,8 @@
         assignWorkerTask(w, setWorkerTool) {
             const state = MO.state;
             const tw = state.tower;
+            const ox = tw.originX || 0;
+            const oz = tw.originZ !== undefined ? tw.originZ : -0.3;
 
             if (state.phase === 1) {
                 const f1 = tw.footings.find(f => !f.dug && !f.res);
@@ -346,13 +362,13 @@
             }
             if (state.phase === 2) {
                 const t1 = tw.tiers.find(t => !t.hasScaffold && !t.res && (t.id === 0 || tw.tiers[t.id - 1].hasSteel));
-                if (t1) { t1.res = true; w.task = { type: 'tw-scaf', item: t1, duration: 0.58 }; w.tx = 1.4; w.tz = TOWER_Z + 1.2; setWorkerTool(w.rig, 'plank'); return true; }
+                if (t1) { t1.res = true; w.task = { type: 'tw-scaf', item: t1, duration: 0.58 }; w.tx = ox + 1.4; w.tz = oz + 1.2; setWorkerTool(w.rig, 'plank'); return true; }
                 const t2 = tw.tiers.find(t => t.hasScaffold && !t.hasSteel && !t.res);
-                if (t2) { t2.res = true; w.task = { type: 'tw-steel', item: t2, duration: 0.62 }; w.tx = -1.4; w.tz = TOWER_Z + 1.2; setWorkerTool(w.rig, 'hammer'); return true; }
+                if (t2) { t2.res = true; w.task = { type: 'tw-steel', item: t2, duration: 0.62 }; w.tx = ox - 1.4; w.tz = oz + 1.2; setWorkerTool(w.rig, 'hammer'); return true; }
             }
             if (state.phase === 3 && !tw.topInstalled && !tw.topBusy) {
                 tw.topBusy = true;
-                w.task = { type: 'tw-top', duration: 0.68 }; w.tx = 0; w.tz = TOWER_Z + 1.4; setWorkerTool(w.rig, 'hammer'); return true;
+                w.task = { type: 'tw-top', duration: 0.68 }; w.tx = ox; w.tz = oz + 1.4; setWorkerTool(w.rig, 'hammer'); return true;
             }
             return false;
         },

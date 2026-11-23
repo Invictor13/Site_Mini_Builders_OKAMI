@@ -8,8 +8,9 @@
             [1.1, -0.6], [-1.1, -0.6], [0.8, 0.8], [-0.8, 0.8]
         ];
         for (let i = 0; i < candidates.length; i++) {
-            const x = Math.max(-8.1, Math.min(8.1, baseX + candidates[i][0]));
-            const z = Math.max(-7.6, Math.min(6.8, baseZ + candidates[i][1]));
+            const limit = Math.max(8.1, MO.DIORAMA_R - 1.1);
+            const x = Math.max(-limit, Math.min(limit, baseX + candidates[i][0]));
+            const z = Math.max(-limit + 0.5, Math.min(limit - 1.2, baseZ + candidates[i][1]));
             const y = MO.getTerrainHeight(x, z);
             if (y > MO.WATER_LEVEL + 0.16) {
                 return { x, y, z };
@@ -120,7 +121,7 @@
     }
 
     function createMessHall() {
-        const spot = findDrySpot(-6.0, -2.7);
+        const spot = findDrySpot(-10.2, -5.2);
         const group = new THREE.Group();
         group.position.set(spot.x, spot.y, spot.z);
         group.rotation.y = 0.25;
@@ -368,22 +369,20 @@
     }
 
     MO.rebuildCamp = function() {
-        while (MO.groups.camp.children.length > 0) {
-            MO.groups.camp.remove(MO.groups.camp.children[0]);
-        }
+        MO.resources.clearGroup(MO.groups.camp);
         const camp = MO.state.camp;
         camp.tents = [
-            createTent(0, 5.8, -3.6, 0x3b82f6),
-            createTent(1, 6.7, -2.6, 0xd97706),
-            createTent(2, 5.5, -2.3, 0x15803d)
+            createTent(0, -8.8, -7.2, 0x3b82f6),
+            createTent(1, -10.4, -7.4, 0xd97706),
+            createTent(2, -7.6, -7.8, 0x15803d)
         ];
         camp.messHall = createMessHall();
         camp.waterCooler = camp.messHall.waterSpot;
         camp.stoveSpot = camp.messHall.stoveSpot;
         camp.campLight = camp.messHall.campLight;
         camp.floodlights = [
-            createFloodlight(0, -4.3, 2.3),
-            createFloodlight(1, 4.4, -2.7)
+            createFloodlight(0, -7.4, 2.8),
+            createFloodlight(1, -3.2, -6.2)
         ];
         camp.steamTimer = 0;
     };

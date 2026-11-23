@@ -18,7 +18,7 @@
 
     MO.buildFoundation3D = function() {
         const foundationGroup = MO.groups.foundation;
-        while (foundationGroup.children.length > 0) foundationGroup.remove(foundationGroup.children[0]);
+        MO.resources.clearGroup(foundationGroup);
         MO.state.columns.forEach(col => {
             col.terrainY = MO.getTerrainHeight(col.x, col.z);
             const g = new THREE.Group();
@@ -124,12 +124,12 @@
 
     MO.eraseColumn = function(col) {
         if (col.concreted && col.pillarMesh) {
-            col.concreted = false; col.meshGroup.remove(col.pillarMesh); col.pillarMesh = null;
+            col.concreted = false; MO.resources.removeAndDispose(col.meshGroup, col.pillarMesh); col.pillarMesh = null;
             if (col.formworkMesh) col.formworkMesh.visible = true; col.ringMesh.visible = true;
         } else if (col.hasFormwork && col.formworkMesh) {
-            col.hasFormwork = false; col.meshGroup.remove(col.formworkMesh); col.formworkMesh = null;
+            col.hasFormwork = false; MO.resources.removeAndDispose(col.meshGroup, col.formworkMesh); col.formworkMesh = null;
         } else if (col.dug && col.holeMesh) {
-            col.dug = false; col.meshGroup.remove(col.holeMesh); col.holeMesh = null;
+            col.dug = false; MO.resources.removeAndDispose(col.meshGroup, col.holeMesh); col.holeMesh = null;
             col.ringMesh.material.color.setHex(0xf59e0b);
         }
     };

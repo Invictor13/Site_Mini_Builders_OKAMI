@@ -30,7 +30,7 @@
     MO.rebuildBlueprintFromCells = function() {
         const state = MO.state;
         const blueprintGroup = MO.groups.blueprint;
-        while (blueprintGroup.children.length > 0) blueprintGroup.remove(blueprintGroup.children[0]);
+        MO.resources.clearGroup(blueprintGroup);
         state.columns = [];
         state.walls = [];
         state.floorTiles = [];
@@ -120,7 +120,7 @@
     MO.renderMurosAndStairsBlueprint = function() {
         const state = MO.state;
         const muroStairGroup = MO.groups.muroStair;
-        while (muroStairGroup.children.length > 0) muroStairGroup.remove(muroStairGroup.children[0]);
+        MO.resources.clearGroup(muroStairGroup);
 
         state.muros.forEach(mu => {
             const ty = MO.getTerrainHeight(mu.x, mu.z);
@@ -182,13 +182,27 @@
 
     MO.loadPresetHouse = function(forcedVariant) {
         const state = MO.state;
+        const activeLot = (MO.regionManager && MO.worldManager && MO.worldManager.meta.persistentGrowth)
+            ? MO.regionManager.getActiveLot()
+            : null;
+        const completedCount = MO.constructionManager
+            ? MO.constructionManager.getCompletedConstructions().length
+            : 0;
         const variants = ['L-shape', 'chalet', 'modern', 'compact'];
-        const chosen = forcedVariant || variants[state.seed % variants.length];
+        const chosen = forcedVariant || variants[(state.seed + completedCount) % variants.length];
         state.variant = chosen;
 
-        for (let x = -3.2; x <= 3.2; x += 0.9) {
-            for (let z = -3.4; z <= 1.8; z += 0.9) {
-                MO.paintLevelWeight(x, z, 1.9, 1.0);
+        if (activeLot) {
+            for (let x = activeLot.originX - activeLot.halfW; x <= activeLot.originX + activeLot.halfW; x += 0.85) {
+                for (let z = activeLot.originZ - activeLot.halfD; z <= activeLot.originZ + activeLot.halfD; z += 0.85) {
+                    MO.paintLevelWeight(x, z, 1.75, 1.0);
+                }
+            }
+        } else {
+            for (let x = -3.2; x <= 3.2; x += 0.9) {
+                for (let z = -3.4; z <= 1.8; z += 0.9) {
+                    MO.paintLevelWeight(x, z, 1.9, 1.0);
+                }
             }
         }
         MO.updateTerrainGeometry();
@@ -197,48 +211,96 @@
         state.muros = [];
         state.stairs = [];
 
-        if (chosen === 'L-shape') {
-            for (let x = 2; x <= 5; x++) {
-                for (let z = 3; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
+        if (activeLot) {
+            const half = MO.GRID_SIZE / 2;
+            const gx0 = Math.max(0, Math.min(MO.GRID_SIZE - 4, Math.round((activeLot.originX - activeLot.halfW) + half)));
+            const gz0 = Math.max(0, Math.min(MO.GRID_SIZE - 4, Math.round(((activeLot.originZ - activeLot.halfD) - MO.GRID_OFFSET_Z) + half)));
+
+            if (chosen === 'L-shape') {
+                for (let x = gx0; x <= gx0 + 2; x++) {
+                    for (let z = gz0; z <= gz0 + 1; z++) state.occupiedCells.add(`${x},${z}`);
+                }
+                for (let x = gx0; x <= gx0 + 1; x++) {
+                    state.occupiedCells.add(`${x},${gz0 + 2}`);
+                }
+            } else if (chosen === 'chalet') {
+                for (let x = gx0; x <= gx0 + 2; x++) {
+                    for (let z = gz0; z <= gz0 + 2; z++) state.occupiedCells.add(`${x},${z}`);
+                }
+            } else if (chosen === 'modern') {
+                for (let x = gx0; x <= gx0 + 3; x++) {
+                    for (let z = gz0; z <= gz0 + 1; z++) state.occupiedCells.add(`${x},${z}`);
+                }
+            } else {
+                for (let x = gx0 + 1; x <= gx0 + 2; x++) {
+                    for (let z = gz0; z <= gz0 + 2; z++) state.occupiedCells.add(`${x},${z}`);
+                }
             }
-            for (let x = 6; x <= 7; x++) {
-                for (let z = 3; z <= 4; z++) state.occupiedCells.add(`${x},${z}`);
+
+            for (let gx = gx0; gx <= gx0 + 2; gx++) {
+                const c = MO.gridToWorldCenter(gx, gz0);
+                state.muros.push({ x: c.x, z: c.z - 0.55, ori: 'H', built: false });
             }
-        } else if (chosen === 'chalet') {
-            for (let x = 3; x <= 6; x++) {
-                for (let z = 2; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
-            }
-        } else if (chosen === 'modern') {
-            for (let x = 2; x <= 6; x++) {
-                for (let z = 3; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
-            }
+            const stairPos = MO.gridToWorldCenter(gx0 + 1, gz0 + 3);
+            state.stairs.push({ x: stairPos.x, z: stairPos.z, built: false });
+
+            MO.rebuildBlueprintFromCells();
+
+            const frontZ = Math.max(...state.walls.map(w => w.z1));
+            const frontWall = state.walls.find(w => w.ori === 'H' && Math.abs(w.z1 - frontZ) < 0.15 && Math.abs((w.x1 + w.x2) / 2 - stairPos.x) < 0.6)
+                || state.walls.find(w => w.ori === 'H' && Math.abs(w.z1 - frontZ) < 0.15);
+            if (frontWall) MO.toggleWallOpening(frontWall, 'door');
+            const win1 = state.walls.find(w => w.ori === 'H' && w !== frontWall);
+            if (win1) MO.toggleWallOpening(win1, 'window');
+            const win2 = state.walls.find(w => w.ori === 'V' && w.x1 > activeLot.originX);
+            if (win2) MO.toggleWallOpening(win2, 'window');
+            const win3 = state.walls.find(w => w.ori === 'V' && w.x1 < activeLot.originX);
+            if (win3) MO.toggleWallOpening(win3, 'window');
         } else {
-            for (let x = 3; x <= 6; x++) {
-                for (let z = 3; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
+            if (chosen === 'L-shape') {
+                for (let x = 2; x <= 5; x++) {
+                    for (let z = 3; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
+                }
+                for (let x = 6; x <= 7; x++) {
+                    for (let z = 3; z <= 4; z++) state.occupiedCells.add(`${x},${z}`);
+                }
+            } else if (chosen === 'chalet') {
+                for (let x = 3; x <= 6; x++) {
+                    for (let z = 2; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
+                }
+            } else if (chosen === 'modern') {
+                for (let x = 2; x <= 6; x++) {
+                    for (let z = 3; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
+                }
+            } else {
+                for (let x = 3; x <= 6; x++) {
+                    for (let z = 3; z <= 5; z++) state.occupiedCells.add(`${x},${z}`);
+                }
             }
+
+            for (let gx = 1; gx <= 7; gx++) {
+                const c = MO.gridToWorldCenter(gx, 1);
+                state.muros.push({ x: c.x, z: c.z - 0.45, ori: 'H', built: false });
+            }
+
+            const stairPos = MO.gridToWorldCenter(3, 6);
+            state.stairs.push({ x: stairPos.x, z: stairPos.z, built: false });
+
+            MO.rebuildBlueprintFromCells();
+
+            const frontWall = state.walls.find(w => w.ori === 'H' && w.z1 > 0.1 && Math.abs((w.x1 + w.x2) / 2 - stairPos.x) < 0.3);
+            if (frontWall) MO.toggleWallOpening(frontWall, 'door');
+            const win1 = state.walls.find(w => w.ori === 'H' && w.z1 > 0.1 && w !== frontWall);
+            if (win1) MO.toggleWallOpening(win1, 'window');
+            const win2 = state.walls.find(w => w.ori === 'V' && w.x1 > 1.2);
+            if (win2) MO.toggleWallOpening(win2, 'window');
+            const win3 = state.walls.find(w => w.ori === 'V' && w.x1 < -1.2);
+            if (win3) MO.toggleWallOpening(win3, 'window');
         }
-
-        for (let gx = 1; gx <= 7; gx++) {
-            const c = MO.gridToWorldCenter(gx, 1);
-            state.muros.push({ x: c.x, z: c.z - 0.45, ori: 'H', built: false });
-        }
-
-        const stairPos = MO.gridToWorldCenter(3, 6);
-        state.stairs.push({ x: stairPos.x, z: stairPos.z, built: false });
-
-        MO.rebuildBlueprintFromCells();
-
-        const frontWall = state.walls.find(w => w.ori === 'H' && w.z1 > 0.1 && Math.abs((w.x1 + w.x2) / 2 - stairPos.x) < 0.3);
-        if (frontWall) MO.toggleWallOpening(frontWall, 'door');
-        const win1 = state.walls.find(w => w.ori === 'H' && w.z1 > 0.1 && w !== frontWall);
-        if (win1) MO.toggleWallOpening(win1, 'window');
-        const win2 = state.walls.find(w => w.ori === 'V' && w.x1 > 1.2);
-        if (win2) MO.toggleWallOpening(win2, 'window');
-        const win3 = state.walls.find(w => w.ori === 'V' && w.x1 < -1.2);
-        if (win3) MO.toggleWallOpening(win3, 'window');
 
         MO.SoundFX.playDirtShovel();
         const vLabels = { 'L-shape': 'Casa em L', chalet: 'Chalé Alpino', modern: 'Casa Moderna Platibanda', compact: 'Casa Compacta' };
-        MO.showToast(`Projeto sorteado: ${vLabels[chosen]}!`, '✨');
+        const lotPrefix = activeLot ? `${activeLot.label}: ` : '';
+        MO.showToast(`${lotPrefix}${vLabels[chosen]}!`, '✨');
     };
 })(window.MO = window.MO || {});

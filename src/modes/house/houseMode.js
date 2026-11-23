@@ -113,7 +113,9 @@
                 const hasSewage = state.plumbNodes.some(n => n.type === 'sewage');
                 if (hasTank && fixCount >= 2 && !hasSewage && !state.sewageBusy) {
                     state.sewageBusy = true;
-                    const sx = 3.6, sz = -2.2;
+                    const activeLot = (MO.regionManager && MO.regionManager.getActiveLot) ? MO.regionManager.getActiveLot() : null;
+                    const sx = activeLot ? (activeLot.originX + activeLot.halfW + 0.55) : 3.6;
+                    const sz = activeLot ? activeLot.originZ : -2.2;
                     w.task = { type: 'mep-plumb', kind: 'sewage', x: sx, z: sz, duration: 0.65 };
                     w.tx = sx; w.tz = sz;
                     setWorkerTool(w.rig, 'hoe');
@@ -260,7 +262,7 @@
                     state.structural.repairedOnce = true;
                     state.structural.integrity = 100;
                     state.roofStage = 0;
-                    while (MO.groups.roof.children.length > 0) MO.groups.roof.remove(MO.groups.roof.children[0]);
+                    MO.resources.clearGroup(MO.groups.roof);
                     state.walls.forEach(w => { w.hasTopBeam = true; w.topBeamMesh.visible = true; if (w.beamFormworkGroup) w.beamFormworkGroup.visible = false; });
                     MO.showToast('🔧 Equipe reforçou a cinta e iniciou reconstrução segura!', '🔧');
                 }
@@ -273,7 +275,8 @@
             } else if (state.phase === 1) {
                 MO.loadPresetHouse();
                 const palettes = ['#f1f5f9', '#dfd3be', '#c9866b', '#8fa893', '#94a3b8'];
-                state.paintColorHex = palettes[state.seed % palettes.length];
+                const lotIdx = MO.constructionManager ? MO.constructionManager.getCompletedConstructions().length : 0;
+                state.paintColorHex = palettes[(state.seed + lotIdx) % palettes.length];
                 MO.advanceToPhase2();
             } else if (state.phase === 2) {
                 if (state.columns.length > 0 && state.columns.every(c => c.concreted)) MO.advanceToPhase3();

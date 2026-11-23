@@ -154,7 +154,7 @@
     MO.buildInteractiveWalls3D = function() {
         const wallsGroup = MO.groups.walls;
         const state = MO.state;
-        while (wallsGroup.children.length > 0) wallsGroup.remove(wallsGroup.children[0]);
+        MO.resources.clearGroup(wallsGroup);
 
         const isStd = state.brickType === 'standard';
         const numRows = isStd ? 6 : 4;
@@ -334,7 +334,7 @@
 
     MO.buildFloorGrid3D = function() {
         const floorGroup = MO.groups.floor;
-        while (floorGroup.children.length > 0) floorGroup.remove(floorGroup.children[0]);
+        MO.resources.clearGroup(floorGroup);
         MO.state.floorTiles.forEach(ft => {
             const hit = new THREE.Mesh(
                 new THREE.BoxGeometry(0.96, 0.12, 0.96),

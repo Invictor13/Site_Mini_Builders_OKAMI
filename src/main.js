@@ -30,8 +30,18 @@
         testPlumbingSystem: MO.testPlumbingSystem,
         setPaintColor: MO.setPaintColor,
         hireMiniWorker: MO.hireMiniWorker,
+        hireSupervisor: MO.hireSupervisor,
+        hireHelper: MO.hireHelper,
+        hireCrew: MO.hireCrew,
+        toggleNpcPanel: MO.toggleNpcPanel,
+        renderNpcRosterUI: MO.renderNpcRosterUI,
+        focusVillageRegion: MO.focusVillageRegion,
+        cycleSimSpeed: MO.cycleSimSpeed,
         regenerateNewTerrain: MO.regenerateNewTerrain,
         toggleScreensaverMode: MO.toggleScreensaverMode,
+        togglePersistentVillage: MO.togglePersistentVillage,
+        advanceToNextVillageLot: MO.advanceToNextVillageLot,
+        toggleDiagnostics: () => MO.diagnostics && MO.diagnostics.toggle(),
         // Ponte
         advanceBridgePhase2: MO.advanceBridgePhase2,
         advanceBridgePhase3: MO.advanceBridgePhase3,
@@ -119,53 +129,158 @@
             p.mesh.position.z += p.vz;
             p.mesh.scale.setScalar(Math.max(0.01, p.life));
             if (p.life <= 0) {
-                MO.groups.fx.remove(p.mesh);
+                MO.resources.removeAndDispose(MO.groups.fx, p.mesh);
                 state.particles.splice(i, 1);
             }
         }
     }
 
-    let lastTime = performance.now();
+    function lerpAngle(a, b, alpha) {
+        const diff = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+        return a + diff * alpha;
+    }
 
-    function animate() {
-        requestAnimationFrame(animate);
-        const now = performance.now();
-        const dt = Math.min(0.05, (now - lastTime) / 1000);
-        lastTime = now;
-        const t = now * 0.001;
+    function restoreWorkerLogicalTransforms() {
+        const workers = MO.state.workers;
+        for (let i = 0; i < workers.length; i++) {
+            const w = workers[i];
+            if (!w || !w._visApplied || !w.rig || !w.rig.group) continue;
+            w.rig.group.position.set(w._currX, w._currY, w._currZ);
+            w.rig.group.rotation.y = w._currYaw;
+            w._visApplied = false;
+        }
+    }
 
+    function captureWorkerPrevTransforms() {
+        const workers = MO.state.workers;
+        for (let i = 0; i < workers.length; i++) {
+            const w = workers[i];
+            if (!w || !w.rig || !w.rig.group) continue;
+            const pos = w.rig.group.position;
+            w._prevX = pos.x;
+            w._prevY = pos.y;
+            w._prevZ = pos.z;
+            w._prevYaw = w.rig.group.rotation.y;
+        }
+    }
+
+    function captureWorkerCurrTransforms() {
+        const workers = MO.state.workers;
+        for (let i = 0; i < workers.length; i++) {
+            const w = workers[i];
+            if (!w || !w.rig || !w.rig.group) continue;
+            const pos = w.rig.group.position;
+            w._currX = pos.x;
+            w._currY = pos.y;
+            w._currZ = pos.z;
+            w._currYaw = w.rig.group.rotation.y;
+            if (w._prevX === undefined) {
+                w._prevX = w._currX;
+                w._prevY = w._currY;
+                w._prevZ = w._currZ;
+                w._prevYaw = w._currYaw;
+            }
+        }
+    }
+
+    function applyWorkerVisualInterpolation(alpha) {
+        const workers = MO.state.workers;
+        for (let i = 0; i < workers.length; i++) {
+            const w = workers[i];
+            if (!w || !w.rig || !w.rig.group || w._currX === undefined || w._prevX === undefined) continue;
+            if (Math.hypot(w._currX - w._prevX, w._currZ - w._prevZ) >= 1.5) continue;
+            w.rig.group.position.set(
+                w._prevX + (w._currX - w._prevX) * alpha,
+                w._prevY + (w._currY - w._prevY) * alpha,
+                w._prevZ + (w._currZ - w._prevZ) * alpha
+            );
+            w.rig.group.rotation.y = lerpAngle(w._prevYaw, w._currYaw, alpha);
+            w._visApplied = true;
+        }
+    }
+
+    function stepSimulation(fixedDt, simTime) {
         updatePhysics();
-        MO.updateWorkers(dt, t);
-        MO.updateAtmosphere(dt, t);
-        MO.updateSkyAndWeather(dt, t);
-        MO.updateRandomEvents(dt);
-        MO.updateCollapseDebris(dt);
-        MO.updateSiteLogistics(dt);
-        if (MO.updateCamp) MO.updateCamp(dt, t);
-        if (MO.updateWaterAndGroundFX) MO.updateWaterAndGroundFX(dt, t);
-        MO.updateAmbientSoundscape(dt);
+        MO.updateWorkers(fixedDt, simTime);
+        MO.updateAtmosphere(fixedDt, simTime);
+        MO.updateSkyAndWeather(fixedDt, simTime);
+        MO.updateRandomEvents(fixedDt);
+        MO.updateCollapseDebris(fixedDt);
+        MO.updateSiteLogistics(fixedDt);
+        if (MO.updateCamp) MO.updateCamp(fixedDt, simTime);
+        if (MO.updateWaterAndGroundFX) MO.updateWaterAndGroundFX(fixedDt, simTime);
+        MO.updateAmbientSoundscape(fixedDt);
 
         const activeMode = MO.modes[MO.state.mode];
         if (activeMode && activeMode.updateSimulation) {
-            activeMode.updateSimulation(dt, t);
+            activeMode.updateSimulation(fixedDt, simTime);
         }
-        MO.updateScreensaverAutopilot(dt, t);
+        MO.updateScreensaverAutopilot(fixedDt, simTime);
+    }
+
+    function renderVisuals(frameDt, visualTime, alpha) {
+        applyWorkerVisualInterpolation(alpha);
+
+        const camDt = Math.min(MO.simClock.maxFrameDt, Math.max(0, frameDt));
+        if (MO.updateScreensaverCamera) {
+            MO.updateScreensaverCamera(camDt, visualTime);
+        }
 
         if (MO.waterTex) {
-            MO.waterTex.offset.x = Math.sin(t * 0.25) * 0.06;
-            MO.waterTex.offset.y = t * 0.025;
+            MO.waterTex.offset.x = Math.sin(visualTime * 0.25) * 0.06;
+            MO.waterTex.offset.y = visualTime * 0.025;
         }
-        if (MO.mixer.mixerBarGroup.visible) {
+        if (MO.mixer && MO.mixer.mixerBarGroup && MO.mixer.mixerBarGroup.visible) {
             MO.mixer.mixerBarGroup.lookAt(MO.camera.position);
         }
 
         const camOrbit = MO.camOrbit;
+        if (camOrbit.targetGoal && !camOrbit.isDragging) {
+            const lerpF = Math.min(1, camDt * 4.5);
+            camOrbit.target.x += (camOrbit.targetGoal.x - camOrbit.target.x) * lerpF;
+            camOrbit.target.y += (camOrbit.targetGoal.y - camOrbit.target.y) * lerpF;
+            camOrbit.target.z += (camOrbit.targetGoal.z - camOrbit.target.z) * lerpF;
+            if (camOrbit.targetRadius !== undefined) {
+                camOrbit.radius += (camOrbit.targetRadius - camOrbit.radius) * lerpF;
+            }
+        }
         MO.camera.position.x = camOrbit.target.x + camOrbit.radius * Math.sin(camOrbit.phi) * Math.sin(camOrbit.theta);
         MO.camera.position.y = camOrbit.target.y + camOrbit.radius * Math.cos(camOrbit.phi);
         MO.camera.position.z = camOrbit.target.z + camOrbit.radius * Math.sin(camOrbit.phi) * Math.cos(camOrbit.theta);
         MO.camera.lookAt(camOrbit.target);
 
         if (MO.renderer) MO.renderer.render(MO.scene, MO.camera);
+    }
+
+    MO.stepFrame = function(frameDtSeconds) {
+        const validDt = (typeof frameDtSeconds === 'number' && Number.isFinite(frameDtSeconds) && frameDtSeconds > 0)
+            ? frameDtSeconds
+            : 0;
+
+        restoreWorkerLogicalTransforms();
+        const steps = MO.simClock.advance(validDt, (fixedDt, simTime) => {
+            captureWorkerPrevTransforms();
+            stepSimulation(fixedDt, simTime);
+            captureWorkerCurrTransforms();
+        });
+        renderVisuals(validDt, MO.simClock.visualTime, MO.simClock.alpha);
+        if (MO.diagnostics) MO.diagnostics.recordFrame(validDt, steps);
+        return steps;
+    };
+
+    let lastTime = performance.now();
+    if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) lastTime = performance.now();
+        });
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const now = performance.now();
+        const frameDt = Math.max(0, (now - lastTime) / 1000);
+        lastTime = now;
+        MO.stepFrame(frameDt);
     }
 
     function initApp() {
@@ -180,8 +295,13 @@
         MO.createDioramaBase();
         MO.createProceduralTerrainMesh();
         MO.populateNatureAndSplats();
+        if (MO.worldManager) {
+            MO.worldManager.initDefaultWorld();
+        }
         MO.populateBuildableLotWeeds();
         MO.placeMixerStationOnTerrain();
+        if (MO.initToolbox) MO.initToolbox();
+        if (MO.initWorkbench) MO.initWorkbench();
         MO.restockSupplies();
         MO.rebuildSiteProps();
         if (MO.rebuildCamp) MO.rebuildCamp();
@@ -189,8 +309,24 @@
         if (MO.modes.house && MO.modes.house.onInit) {
             MO.modes.house.onInit();
         }
+        let restored = false;
+        if (MO.worldManager) {
+            restored = MO.worldManager.restoreSavedWorld ? MO.worldManager.restoreSavedWorld() : false;
+            if (!restored && MO.worldManager.meta.persistentGrowth) {
+                MO.populateBuildableLotWeeds();
+                MO.updateTerrainGridLines();
+            }
+        }
+        if (MO.updateVillageUI) MO.updateVillageUI();
+        if (MO.workerFactory && MO.workerFactory.syncNpcUI) MO.workerFactory.syncNpcUI();
+        if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
         MO.syncPhaseUI();
         MO.selectTool('clear-weeds');
+        if (restored) {
+            const doneCount = MO.constructionManager ? MO.constructionManager.getCompletedConstructions().length : 0;
+            MO.showToast(`🏘️ Vila restaurada com ${doneCount} casa(s) preservada(s)!`, '🏡');
+        }
+        lastTime = performance.now();
         animate();
     }
 
