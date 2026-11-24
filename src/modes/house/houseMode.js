@@ -273,7 +273,7 @@
                 const allLeveled = MO.computeLotLevelProgress() >= 92;
                 if (allWeedsCleared && allLeveled) MO.advanceToPhase1();
             } else if (state.phase === 1) {
-                MO.loadPresetHouse();
+                if (state.walls.length === 0) MO.loadPresetHouse();
                 const palettes = ['#f1f5f9', '#dfd3be', '#c9866b', '#8fa893', '#94a3b8'];
                 const lotIdx = MO.constructionManager ? MO.constructionManager.getCompletedConstructions().length : 0;
                 state.paintColorHex = palettes[(state.seed + lotIdx) % palettes.length];

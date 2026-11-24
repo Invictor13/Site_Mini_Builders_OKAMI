@@ -7,6 +7,41 @@
 
     let isDrawingRect = false;
     let dragStartCell = null;
+    const cameraKeys = { up: false, down: false, left: false, right: false };
+
+    function intersectTerrain(rc) {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            const list = MO.chunkManager.getChunkMeshes();
+            if (list && list.length > 0) return rc.intersectObjects(list, false);
+        }
+        return MO.terrainMesh ? rc.intersectObject(MO.terrainMesh) : [];
+    }
+    MO.intersectTerrain = intersectTerrain;
+
+    MO.updateCameraPan = function(dt) {
+        if (!dt || !MO.camOrbit) return;
+        const dxKey = (cameraKeys.right ? 1 : 0) - (cameraKeys.left ? 1 : 0);
+        const dzKey = (cameraKeys.down ? 1 : 0) - (cameraKeys.up ? 1 : 0);
+        if (dxKey === 0 && dzKey === 0) return;
+
+        const camOrbit = MO.camOrbit;
+        const panSpeed = Math.max(10, camOrbit.radius * 0.65) * dt;
+        const sinT = Math.sin(camOrbit.theta);
+        const cosT = Math.cos(camOrbit.theta);
+        // Movimento relativo à rotação da câmera no plano XZ
+        const moveX = (dxKey * cosT + dzKey * sinT);
+        const moveZ = (-dxKey * sinT + dzKey * cosT);
+        const len = Math.hypot(moveX, moveZ) || 1;
+        const stepX = (moveX / len) * panSpeed;
+        const stepZ = (moveZ / len) * panSpeed;
+
+        camOrbit.target.x += stepX;
+        camOrbit.target.z += stepZ;
+        if (camOrbit.targetGoal) {
+            camOrbit.targetGoal.x = camOrbit.target.x;
+            camOrbit.targetGoal.z = camOrbit.target.z;
+        }
+    };
 
     function setMouseNDC(e) {
         mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -66,15 +101,28 @@
         const camOrbit = MO.camOrbit;
         const camera = MO.camera;
 
-        // Atalho de teclado H ou Escape para Modo Zen (Protetor de Tela sem HUD)
+        // Atalho de teclado H/Escape (Zen), P (Diagnóstico) e WASD/Setas para câmera livre no mundo infinito
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'h' || e.key === 'H') {
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+            const k = e.key.toLowerCase();
+            if (k === 'h') {
                 MO.toggleZenMode();
-            } else if (e.key === 'p' || e.key === 'P') {
+            } else if (k === 'p') {
                 if (MO.diagnostics) MO.diagnostics.toggle();
             } else if (e.key === 'Escape' && state.zenMode) {
                 MO.toggleZenMode(false);
-            }
+            } else if (k === 'w' || e.key === 'ArrowUp') cameraKeys.up = true;
+            else if (k === 's' || e.key === 'ArrowDown') cameraKeys.down = true;
+            else if (k === 'a' || e.key === 'ArrowLeft') cameraKeys.left = true;
+            else if (k === 'd' || e.key === 'ArrowRight') cameraKeys.right = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const k = e.key.toLowerCase();
+            if (k === 'w' || e.key === 'ArrowUp') cameraKeys.up = false;
+            else if (k === 's' || e.key === 'ArrowDown') cameraKeys.down = false;
+            else if (k === 'a' || e.key === 'ArrowLeft') cameraKeys.left = false;
+            else if (k === 'd' || e.key === 'ArrowRight') cameraKeys.right = false;
         });
 
         // Gestos Touch Multi-ponteiro (Pinch Zoom + Órbita 1 ou 2 dedos em Celulares/Tablets)
@@ -96,7 +144,7 @@
         }
 
         window.addEventListener('pointerdown', (e) => {
-            if (e.target.closest('button') || e.target.closest('.dock-surface')) return;
+            if (e.target.closest('button') || e.target.closest('.dock-surface') || e.target.closest('#city-setup-modal')) return;
 
             if (e.pointerType === 'touch') {
                 activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -119,6 +167,7 @@
 
             if (e.button === 2 || e.button === 1) {
                 camOrbit.isDragging = true;
+                camOrbit.isPanning = (e.button === 1 || e.shiftKey);
                 camOrbit.prevX = e.clientX;
                 camOrbit.prevY = e.clientY;
                 return;
@@ -201,6 +250,14 @@
                 }
             }
 
+            // --- POSICIONAMENTO LIVRE NA CIDADE INFINITA (Estradas, Ruas, Casas, Prédios, Fazendas...) ---
+            if (state.city && state.city.activeBuildTool && MO.cityManager) {
+                const thCity = intersectTerrain(raycaster);
+                if (thCity.length > 0 && MO.cityManager.handlePlacementPointerDown(thCity[0].point)) {
+                    return;
+                }
+            }
+
             // --- FASE 0 COMPARTILHADA: CAPINA DO MATO & TERRAPLANAGEM ---
             if (state.phase === 0) {
                 if (state.tool === 'clear-weeds') {
@@ -211,7 +268,7 @@
                             return;
                         }
                     }
-                    const th = raycaster.intersectObject(MO.terrainMesh);
+                    const th = intersectTerrain(raycaster);
                     if (th.length > 0) {
                         const p = th[0].point;
                         const nearW = state.weeds.find(w => !w.cleared && Math.hypot(w.x - p.x, w.z - p.z) < 1.1);
@@ -220,7 +277,7 @@
                     return;
                 }
                 if (state.tool === 'level') {
-                    const th = raycaster.intersectObject(MO.terrainMesh);
+                    const th = intersectTerrain(raycaster);
                     if (th.length > 0) {
                         state.isLevelingTerrain = true;
                         const p = th[0].point;
@@ -275,7 +332,7 @@
             // --- MODO CASA (FASES 1 a 5) ---
             if (state.phase === 1) {
                 if (state.tool === 'level') {
-                    const th = raycaster.intersectObject(MO.terrainMesh);
+                    const th = intersectTerrain(raycaster);
                     if (th.length > 0) {
                         state.isLevelingTerrain = true;
                         const p = th[0].point;
@@ -300,7 +357,7 @@
                 }
 
                 if (state.tool === 'muro') {
-                    const th = raycaster.intersectObject(MO.terrainMesh);
+                    const th = intersectTerrain(raycaster);
                     if (th.length > 0) {
                         const p = th[0].point;
                         const c = MO.worldToGrid(p);
@@ -316,7 +373,7 @@
                 }
 
                 if (state.tool === 'stair') {
-                    const th = raycaster.intersectObject(MO.terrainMesh);
+                    const th = intersectTerrain(raycaster);
                     if (th.length > 0) {
                         const c = MO.worldToGrid(th[0].point);
                         const center = MO.gridToWorldCenter(c.gx, c.gz);
@@ -342,7 +399,7 @@
                             return;
                         }
                     }
-                    const th = raycaster.intersectObject(MO.terrainMesh);
+                    const th = intersectTerrain(raycaster);
                     if (th.length > 0) {
                         isDrawingRect = true;
                         dragStartCell = MO.worldToGrid(th[0].point);
@@ -353,7 +410,7 @@
                 }
 
                 if (state.tool === 'room') {
-                    const th = raycaster.intersectObject(MO.terrainMesh);
+                    const th = intersectTerrain(raycaster);
                     if (th.length > 0) {
                         isDrawingRect = true;
                         dragStartCell = MO.worldToGrid(th[0].point);
@@ -559,7 +616,7 @@
                         MO.placePlumbingNode('fixture', wHits[0].point);
                         return;
                     }
-                    const tHits = raycaster.intersectObject(MO.terrainMesh);
+                    const tHits = intersectTerrain(raycaster);
                     if (tHits.length > 0) {
                         MO.placePlumbingNode('sewage', tHits[0].point);
                     }
@@ -643,7 +700,8 @@
                     const m = getTouchPairMetrics();
                     if (m && pinchStartDist > 0) {
                         const scale = pinchStartDist / Math.max(10, m.dist);
-                        camOrbit.radius = Math.max(10, Math.min(54, pinchStartRadius * scale));
+                        camOrbit.radius = Math.max(10, Math.min(82, pinchStartRadius * scale));
+                        camOrbit.targetRadius = camOrbit.radius;
                         camOrbit.theta -= (m.midX - camOrbit.prevX) * 0.007;
                         camOrbit.phi = Math.max(0.28, Math.min(1.36, camOrbit.phi - (m.midY - camOrbit.prevY) * 0.007));
                         camOrbit.prevX = m.midX;
@@ -670,17 +728,47 @@
             }
 
             if (camOrbit.isDragging) {
-                camOrbit.theta -= (e.clientX - camOrbit.prevX) * 0.007;
-                camOrbit.phi = Math.max(0.28, Math.min(1.36, camOrbit.phi - (e.clientY - camOrbit.prevY) * 0.007));
+                const dx = e.clientX - camOrbit.prevX;
+                const dy = e.clientY - camOrbit.prevY;
+                if (camOrbit.isPanning) {
+                    const panFactor = camOrbit.radius * 0.0022;
+                    const sinT = Math.sin(camOrbit.theta);
+                    const cosT = Math.cos(camOrbit.theta);
+                    camOrbit.target.x -= (dx * cosT + dy * sinT) * panFactor;
+                    camOrbit.target.z -= (-dx * sinT + dy * cosT) * panFactor;
+                    if (camOrbit.targetGoal) {
+                        camOrbit.targetGoal.x = camOrbit.target.x;
+                        camOrbit.targetGoal.z = camOrbit.target.z;
+                    }
+                } else {
+                    camOrbit.theta -= dx * 0.007;
+                    camOrbit.phi = Math.max(0.28, Math.min(1.36, camOrbit.phi - dy * 0.007));
+                }
                 camOrbit.prevX = e.clientX;
                 camOrbit.prevY = e.clientY;
                 return;
             }
 
+            if (state.city && state.city.activeBuildTool && MO.cityManager) {
+                setMouseNDC(e);
+                raycaster.setFromCamera(mouse, camera);
+                const thCity = intersectTerrain(raycaster);
+                if (thCity.length > 0) {
+                    if (MO.cityManager.isDraggingPlacement()) {
+                        MO.cityManager.handlePlacementPointerMove(thCity[0].point);
+                        return;
+                    } else if (MO.cityManager.updatePlacementPreview) {
+                        MO.cityManager.updatePlacementPreview(thCity[0].point);
+                    }
+                }
+            } else if (MO.placementGhost && MO.placementGhost.visible) {
+                MO.placementGhost.visible = false;
+            }
+
             if (state.isLevelingTerrain && (state.phase === 0 || (state.mode === 'house' && state.phase === 1)) && state.tool === 'level') {
                 setMouseNDC(e);
                 raycaster.setFromCamera(mouse, camera);
-                const th = raycaster.intersectObject(MO.terrainMesh);
+                const th = intersectTerrain(raycaster);
                 if (th.length > 0) {
                     const p = th[0].point;
                     MO.paintLevelWeight(p.x, p.z, 1.65, 0.25);
@@ -702,7 +790,7 @@
 
                 setMouseNDC(e);
                 raycaster.setFromCamera(mouse, camera);
-                const th = raycaster.intersectObject(MO.terrainMesh);
+                const th = intersectTerrain(raycaster);
                 if (th.length > 0) {
                     const lx = Math.max(-0.55, Math.min(0.55, th[0].point.x - stationGroup.position.x));
                     const lz = Math.max(-0.38, Math.min(0.38, th[0].point.z - stationGroup.position.z));
@@ -768,7 +856,7 @@
             if (state.draggedItem) {
                 setMouseNDC(e);
                 raycaster.setFromCamera(mouse, camera);
-                const th = raycaster.intersectObject(MO.terrainMesh);
+                const th = intersectTerrain(raycaster);
                 if (th.length > 0) {
                     const pt = th[0].point;
                     const item = state.draggedItem.ref;
@@ -802,7 +890,7 @@
             if (isDrawingRect && state.mode === 'house' && state.phase === 1) {
                 setMouseNDC(e);
                 raycaster.setFromCamera(mouse, camera);
-                const th = raycaster.intersectObject(MO.terrainMesh);
+                const th = intersectTerrain(raycaster);
                 if (th.length > 0) MO.updateSelectionPreview(dragStartCell, MO.worldToGrid(th[0].point));
                 return;
             }
@@ -832,6 +920,14 @@
             }
             if (activePointers.size < 2) {
                 camOrbit.isDragging = false;
+                camOrbit.isPanning = false;
+            }
+            if (state.city && state.city.activeBuildTool && MO.cityManager && MO.cityManager.isDraggingPlacement()) {
+                setMouseNDC(e);
+                raycaster.setFromCamera(mouse, camera);
+                const thCity = intersectTerrain(raycaster);
+                MO.cityManager.handlePlacementPointerUp(thCity.length > 0 ? thCity[0].point : null);
+                return;
             }
             state.isStirringMixer = false;
             state.isLevelingTerrain = false;
@@ -882,7 +978,7 @@
                 MO.selectionPreview.visible = false;
                 setMouseNDC(e);
                 raycaster.setFromCamera(mouse, camera);
-                const th = raycaster.intersectObject(MO.terrainMesh);
+                const th = intersectTerrain(raycaster);
                 if (th.length > 0) {
                     const endC = MO.worldToGrid(th[0].point);
                     const minX = Math.min(dragStartCell.gx, endC.gx), maxX = Math.max(dragStartCell.gx, endC.gx);
@@ -904,7 +1000,8 @@
         window.addEventListener('contextmenu', e => e.preventDefault());
         window.addEventListener('wheel', e => {
             e.preventDefault();
-            camOrbit.radius = Math.max(10, Math.min(54, camOrbit.radius + e.deltaY * 0.012));
+            camOrbit.radius = Math.max(10, Math.min(82, camOrbit.radius + e.deltaY * 0.012));
+            camOrbit.targetRadius = camOrbit.radius;
         }, { passive: false });
     };
 })(window.MO = window.MO || {});

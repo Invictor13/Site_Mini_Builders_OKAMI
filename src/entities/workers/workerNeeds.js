@@ -3,6 +3,7 @@
 // =========================================================================
 (function(MO) {
     function updateNeeds(w, dt, isDarkSite, isHotBiome) {
+        w.socialCooldown = Math.max(0, (w.socialCooldown || 0) - dt);
         if (!w.sleepingInside) {
             const hydDrain = (isHotBiome && !MO.state.isNight) ? 1.15 : 0.72;
             const engDrain = isDarkSite ? 1.05 : 0.62;
@@ -118,7 +119,7 @@
         }
 
         const campBuilderBusy = state.workers.some(o => o.task && (o.task.type === 'build-tent' || o.task.type === 'build-mess' || o.task.type === 'build-floodlight'));
-        const canBuildCampNow = afterWorkCheck || (!campBuilderBusy && (state.phase > 0 || state.weeds.filter(wd => !wd.cleared).length < 6));
+        const canBuildCampNow = w.role !== 'supervisor' && (afterWorkCheck || (!campBuilderBusy && (state.phase > 0 || state.weeds.filter(wd => !wd.cleared).length < 6)));
         if (canBuildCampNow) {
             const unbuiltLight = camp.floodlights.find(fl => !fl.built && fl.reserved === false);
             if (unbuiltLight) {
@@ -152,7 +153,7 @@
         }
 
         if (afterWorkCheck) {
-            if (w.role === 'foreman') {
+            if (w.role === 'supervisor' || w.role === 'foreman') {
                 const ang = t * 0.4 + w.id;
                 w.task = { type: 'inspect-site', duration: 2.0, subPhase: 'work' };
                 setDestinationFn(w, Math.cos(ang) * 2.2, Math.sin(ang) * 2.0 - 0.3);
@@ -161,6 +162,58 @@
                 setToolFn(w.rig, 'clipboard');
                 return true;
             }
+
+            // P2.0: Interação social com colega próximo
+            if ((w.socialCooldown || 0) <= 0 && w.rig && w.rig.group) {
+                const pos = w.rig.group.position;
+                const peer = state.workers.find(o => o !== w && !o.sleepingInside && o.rig && o.rig.group
+                    && Math.hypot(o.rig.group.position.x - pos.x, o.rig.group.position.z - pos.z) < 4.0);
+                if (peer) {
+                    w.socialCooldown = 22;
+                    w.task = { type: 'social-chat', peer, duration: 1.55, subPhase: 'work' };
+                    setDestinationFn(w, peer.rig.group.position.x + 0.72, peer.rig.group.position.z + 0.35);
+                    w.rig.setBadge('💬');
+                    w.statusText = `Conversando com ${peer.name}`;
+                    return true;
+                }
+            }
+
+            // P2.2: Vida pós-construção — visitar/habitar casas concluídas e jardins
+            const completedList = MO.constructionManager ? MO.constructionManager.getCompletedConstructions() : [];
+            const completedHouses = completedList.filter(c => c.mode === 'house');
+            if (completedHouses.length > 0 && (w.specialty === 'resident' || w.specialty === 'gardener' || state.villageCompleted || (w.id % 2 === 0))) {
+                const houseRec = completedHouses[w.id % completedHouses.length];
+                const lot = MO.regionManager ? MO.regionManager.getLot(houseRec.lotId) : null;
+                const hx = lot ? lot.originX : -4.4;
+                const hz = lot ? lot.originZ : -4.6;
+                if (w.specialty === 'gardener' || w.specialty === 'earthwork') {
+                    w.task = { type: 'tend-garden', duration: 1.65, subPhase: 'work' };
+                    setDestinationFn(w, hx + 1.65, hz + 1.35);
+                    w.rig.setBadge('🌱');
+                    w.statusText = `Cuidando do jardim (${lot ? lot.label : 'Vila'})`;
+                    setToolFn(w.rig, 'hoe');
+                    return true;
+                }
+                const door = (houseRec.obstacles && houseRec.obstacles.doorCenters && houseRec.obstacles.doorCenters[0]) || { x: hx, z: hz + 1.55 };
+                w.task = { type: 'visit-home', duration: 2.1, subPhase: 'work' };
+                setDestinationFn(w, door.x, door.z + 0.35);
+                w.rig.setBadge('🏡');
+                w.statusText = state.isNight ? `Em casa (${lot ? lot.label : 'Vila'})` : `Descansando na varanda (${lot ? lot.label : 'Vila'})`;
+                return true;
+            }
+
+            // Travessia contemplativa pela ponte quando o Banco Leste está liberado
+            if (state.villageInfra && state.villageInfra.bridgeUnlocked && (state.villageCompleted || w.id % 3 === 1)) {
+                const bz = state.villageInfra.bridgeZ !== undefined ? state.villageInfra.bridgeZ : -0.6;
+                const rx = MO.getRiverCenterX ? MO.getRiverCenterX(bz) : 1.6;
+                const toEast = w.rig && w.rig.group ? (w.rig.group.position.x < rx) : true;
+                w.task = { type: 'stroll-bridge', duration: 1.4, subPhase: 'work' };
+                setDestinationFn(w, toEast ? rx + 3.2 : rx - 3.2, bz);
+                w.rig.setBadge('🌉');
+                w.statusText = 'Atravessando a ponte da vila';
+                return true;
+            }
+
             if (camp.messHall && camp.messHall.built) {
                 const seat = camp.messHall.seats[w.id % camp.messHall.seats.length];
                 w.task = { type: 'camp-hangout', duration: 1.8, subPhase: 'work' };
@@ -203,7 +256,7 @@
             releaseCampReservations(w);
             return true;
         }
-        if (tk.type === 'shelter-rain' || tk.type === 'camp-hangout') {
+        if (tk.type === 'shelter-rain' || tk.type === 'camp-hangout' || tk.type === 'social-chat' || tk.type === 'visit-home' || tk.type === 'tend-garden' || tk.type === 'stroll-bridge' || tk.type === 'assist-peer') {
             w.energy = Math.min(100, w.energy + 12);
             return true;
         }

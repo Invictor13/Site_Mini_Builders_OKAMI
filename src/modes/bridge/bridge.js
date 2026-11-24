@@ -586,4 +586,13 @@
     MO.advanceBridgePhase2 = MO.advanceBridgePhase2;
     MO.advanceBridgePhase3 = MO.advanceBridgePhase3;
     MO.runBridgeLoadTest = MO.runBridgeLoadTest;
+    MO.bridgeHelpers = {
+        buildAbutment,
+        drivePierPiles,
+        buildPierCofferdam,
+        concreteBridgePier,
+        installBridgeGirder,
+        installBridgeDeck,
+        installBridgeRails
+    };
 })(window.MO = window.MO || {});

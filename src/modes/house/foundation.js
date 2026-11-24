@@ -4,7 +4,8 @@
 (function(MO) {
     MO.advanceToPhase2 = function() {
         const state = MO.state;
-        if (state.occupiedCells.size < 4) {
+        const minCells = state.cityMode ? 2 : 4;
+        if (state.occupiedCells.size < minCells) {
             MO.showToast('Desenhe pelo menos 2x2m na planta ou clique em ✨ Modelo!', '⚠️');
             return;
         }

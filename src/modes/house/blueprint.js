@@ -3,6 +3,9 @@
 // =========================================================================
 (function(MO) {
     MO.worldToGrid = function(pt) {
+        if (MO.state && MO.state.infiniteWorld) {
+            return { gx: Math.floor(pt.x), gz: Math.floor(pt.z) };
+        }
         const half = MO.GRID_SIZE / 2;
         return {
             gx: Math.max(0, Math.min(MO.GRID_SIZE - 1, Math.floor(pt.x + half))),
@@ -11,6 +14,9 @@
     };
 
     MO.gridToWorldCenter = function(gx, gz) {
+        if (MO.state && MO.state.infiniteWorld) {
+            return { x: gx + 0.5, z: gz + 0.5 };
+        }
         const half = MO.GRID_SIZE / 2;
         return { x: gx - half + 0.5, z: gz - half + 0.5 + MO.GRID_OFFSET_Z };
     };
@@ -19,9 +25,15 @@
         const minX = Math.min(c1.gx, c2.gx), maxX = Math.max(c1.gx, c2.gx);
         const minZ = Math.min(c1.gz, c2.gz), maxZ = Math.max(c1.gz, c2.gz);
         const w = maxX - minX + 1, d = maxZ - minZ + 1;
-        const half = MO.GRID_SIZE / 2;
-        const px = minX - half + w / 2;
-        const pz = minZ - half + d / 2 + MO.GRID_OFFSET_Z;
+        let px, pz;
+        if (MO.state && MO.state.infiniteWorld) {
+            px = minX + w / 2;
+            pz = minZ + d / 2;
+        } else {
+            const half = MO.GRID_SIZE / 2;
+            px = minX - half + w / 2;
+            pz = minZ - half + d / 2 + MO.GRID_OFFSET_Z;
+        }
         MO.selectionPreview.scale.set(w, 1, d);
         MO.selectionPreview.position.set(px, MO.getTerrainHeight(px, pz) + 0.12, pz);
         MO.selectionPreview.visible = true;
@@ -83,8 +95,10 @@
                 if (!state.occupiedCells.has(`${gx + n.dx},${gz + n.dz}`)) {
                     const id = `${n.x1},${n.z1}-${n.x2},${n.z2}`;
                     if (!wallMap.has(id)) {
-                        const wx1 = n.x1 - half, wz1 = n.z1 - half + MO.GRID_OFFSET_Z;
-                        const wx2 = n.x2 - half, wz2 = n.z2 - half + MO.GRID_OFFSET_Z;
+                        const wx1 = state.infiniteWorld ? n.x1 : (n.x1 - half);
+                        const wz1 = state.infiniteWorld ? n.z1 : (n.z1 - half + MO.GRID_OFFSET_Z);
+                        const wx2 = state.infiniteWorld ? n.x2 : (n.x2 - half);
+                        const wz2 = state.infiniteWorld ? n.z2 : (n.z2 - half + MO.GRID_OFFSET_Z);
                         wallMap.set(id, { id, x1: wx1, z1: wz1, x2: wx2, z2: wz2, ori: n.ori, opening: null, slots: [] });
                         regVertex(wx1, wz1, n.ori);
                         regVertex(wx2, wz2, n.ori);
@@ -213,8 +227,12 @@
 
         if (activeLot) {
             const half = MO.GRID_SIZE / 2;
-            const gx0 = Math.max(0, Math.min(MO.GRID_SIZE - 4, Math.round((activeLot.originX - activeLot.halfW) + half)));
-            const gz0 = Math.max(0, Math.min(MO.GRID_SIZE - 4, Math.round(((activeLot.originZ - activeLot.halfD) - MO.GRID_OFFSET_Z) + half)));
+            const gx0 = state.infiniteWorld
+                ? Math.round(activeLot.originX - activeLot.halfW)
+                : Math.max(0, Math.min(MO.GRID_SIZE - 4, Math.round((activeLot.originX - activeLot.halfW) + half)));
+            const gz0 = state.infiniteWorld
+                ? Math.round(activeLot.originZ - activeLot.halfD)
+                : Math.max(0, Math.min(MO.GRID_SIZE - 4, Math.round(((activeLot.originZ - activeLot.halfD) - MO.GRID_OFFSET_Z) + half)));
 
             if (chosen === 'L-shape') {
                 for (let x = gx0; x <= gx0 + 2; x++) {

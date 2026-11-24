@@ -3,7 +3,10 @@
 // =========================================================================
 (function(MO) {
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 160);
+    if (typeof THREE.FogExp2 === 'function') {
+        scene.fog = new THREE.FogExp2(0x11161f, 0.0042);
+    }
+    const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 520);
 
     function getViewportMetrics() {
         const w = window.innerWidth || 1280;
@@ -17,10 +20,10 @@
         const tanHalfV = Math.tan(halfFovRad);
         const tanHalfH = tanHalfV * aspect;
 
-        // Raio mínimo para enquadrar o diâmetro do diorama + estações
-        const minRadiusH = (MO.DIORAMA_R + 1.4) / Math.max(0.22, tanHalfH);
-        const minRadiusV = (MO.DIORAMA_R * 0.80) / Math.max(0.22, tanHalfV);
-        const radius = Math.max(26.0, Math.min(62.0, Math.max(minRadiusH, minRadiusV)));
+        // Raio mínimo para enquadrar o vale amplo da cidade
+        const minRadiusH = (MO.DIORAMA_R + 3.0) / Math.max(0.22, tanHalfH);
+        const minRadiusV = (MO.DIORAMA_R * 0.90) / Math.max(0.22, tanHalfV);
+        const radius = Math.max(32.0, Math.min(68.0, Math.max(minRadiusH, minRadiusV)));
 
         // Em retrato desloca levemente o target para cima/baixo para centralizar entre HUD superior e dock inferior
         const targetY = isPortrait ? 0.85 : 0.55;
@@ -36,10 +39,10 @@
     camera.updateProjectionMatrix();
 
     const camOrbit = {
-        radius: initialMetrics.radius,
-        targetRadius: initialMetrics.radius,
-        theta: 0.22,
-        phi: initialMetrics.isPortrait ? 0.90 : 0.86,
+        radius: 23.5,
+        targetRadius: 23.5,
+        theta: 0.36,
+        phi: initialMetrics.isPortrait ? 1.02 : 0.96,
         target: new THREE.Vector3(0, initialMetrics.targetY, 0.2),
         targetGoal: new THREE.Vector3(0, initialMetrics.targetY, 0.2),
         isDragging: false,
@@ -94,7 +97,7 @@
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
-    const sd = 13;
+    const sd = 22;
     sunLight.shadow.camera.left = -sd;
     sunLight.shadow.camera.right = sd;
     sunLight.shadow.camera.top = sd;
@@ -110,6 +113,9 @@
 
     MO.groups = {
         diorama: new THREE.Group(),
+        terrainChunks: new THREE.Group(),
+        cityInfra: new THREE.Group(),
+        cityNodes: new THREE.Group(),
         nature: new THREE.Group(),
         weeds: new THREE.Group(),
         splat: new THREE.Group(),
@@ -154,12 +160,27 @@
     scene.add(brickHoverGhost);
     MO.brickHoverGhost = brickHoverGhost;
 
+    const placementGhostMat = new THREE.MeshBasicMaterial({
+        color: 0x22c55e,
+        transparent: true,
+        opacity: 0.42,
+        depthWrite: false
+    });
+    const placementGhost = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 0.4, 1),
+        placementGhostMat
+    );
+    placementGhost.visible = false;
+    scene.add(placementGhost);
+    MO.placementGhost = placementGhost;
+
     const burstGeo = new THREE.BoxGeometry(0.055, 0.055, 0.055);
     const burstMats = new Map();
     if (MO.resources) {
         MO.resources.protect(
             selectionPreview.geometry, selectionPreview.material,
             brickHoverGhost.geometry, brickHoverGhost.material,
+            placementGhost.geometry, placementGhost.material,
             burstGeo
         );
     }
@@ -207,17 +228,42 @@
         const sunAngle = tod * Math.PI * 2;
         const elevation = Math.sin(sunAngle); // >0 dia, <0 noite
 
-        sunLight.position.set(Math.cos(sunAngle) * 16, Math.max(4, Math.abs(elevation) * 20), 12);
+        const sd = (MO.state && MO.state.infiniteWorld) ? 24 : 13;
+        if (sunLight.shadow && sunLight.shadow.camera) {
+            sunLight.shadow.camera.left = -sd;
+            sunLight.shadow.camera.right = sd;
+            sunLight.shadow.camera.top = sd;
+            sunLight.shadow.camera.bottom = -sd;
+        }
+        const tx = camOrbit && camOrbit.target ? camOrbit.target.x : 0;
+        const tz = camOrbit && camOrbit.target ? camOrbit.target.z : 0;
+        sunLight.position.set(tx + Math.cos(sunAngle) * 18, Math.max(5, Math.abs(elevation) * 22), tz + 14);
+        if (sunLight.target) {
+            sunLight.target.position.set(tx, 0, tz);
+            if (!sunLight.target.parent) scene.add(sunLight.target);
+        }
 
         const dayFactor = Math.max(0, Math.min(1, (elevation + 0.15) / 0.55));
         const sunsetFactor = Math.max(0, 1 - Math.abs(elevation) / 0.35);
 
-        sunLight.intensity = 0.26 + dayFactor * 1.18;
+        sunLight.intensity = 0.34 + dayFactor * 1.32;
         sunLight.color.copy(cSunNight).lerp(cSunDay, dayFactor).lerp(cSunSunset, sunsetFactor * 0.65);
 
-        hemiLight.intensity = 0.20 + dayFactor * 0.30;
+        hemiLight.intensity = 0.28 + dayFactor * 0.42;
         hemiLight.color.copy(cSkyNight).lerp(cSkyDay, dayFactor);
-        rimLight.intensity = 0.18 + (1 - dayFactor) * 0.28;
+        rimLight.intensity = 0.22 + (1 - dayFactor) * 0.28;
+        if (scene.fog && scene.fog.color) {
+            scene.fog.color.setHex(0x0c111b).lerp(new THREE.Color(0x88c7e8), dayFactor).lerp(new THREE.Color(0xd97757), sunsetFactor * 0.42);
+        }
+        if (typeof document !== 'undefined' && document.body && state.biome === 'forest') {
+            if (dayFactor > 0.55) {
+                document.body.style.background = 'linear-gradient(180deg, #38bdf8 0%, #7dd3fc 42%, #bae6fd 72%, #1e3a5f 100%)';
+            } else if (sunsetFactor > 0.35) {
+                document.body.style.background = 'linear-gradient(180deg, #475569 0%, #c26d4f 48%, #f59e0b 78%, #1e293b 100%)';
+            } else {
+                document.body.style.background = 'radial-gradient(circle at 50% 42%, #172033 0%, #0d1421 62%, #060910 100%)';
+            }
+        }
 
         const nowNight = dayFactor < 0.32;
         if (nowNight !== state.isNight) {
@@ -243,6 +289,9 @@
                     l.bulb.material.emissiveIntensity = state.isNight ? 2.0 : 0.8;
                 }
             }
+        }
+        if (MO.constructionManager && MO.constructionManager.updateWarmWindowGlow) {
+            MO.constructionManager.updateWarmWindowGlow(state.isNight);
         }
         if (state.mode === 'bridge' && state.bridge.lamps.length > 0) {
             state.bridge.lamps.forEach(lp => {

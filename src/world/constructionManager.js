@@ -67,6 +67,34 @@
         }
 
         function captureBlueprintSnapshot(state) {
+            if (state.mode === 'bridge' && state.bridge) {
+                return {
+                    mode: 'bridge',
+                    variant: state.variant,
+                    seed: state.seed,
+                    originX: state.bridge.originX,
+                    originZ: state.bridge.originZ
+                };
+            }
+            if (state.mode === 'building' && state.building) {
+                return {
+                    mode: 'building',
+                    variant: state.variant,
+                    seed: state.seed,
+                    numFloors: state.building.numFloors,
+                    originX: state.building.originX,
+                    originZ: state.building.originZ
+                };
+            }
+            if (state.mode === 'tower' && state.tower) {
+                return {
+                    mode: 'tower',
+                    variant: state.variant,
+                    seed: state.seed,
+                    originX: state.tower.originX,
+                    originZ: state.tower.originZ
+                };
+            }
             if (state.mode !== 'house') {
                 return { mode: state.mode, variant: state.variant, seed: state.seed };
             }
@@ -223,6 +251,111 @@
             return record;
         }
 
+        let sharedPorchBulbMat = null;
+        let sharedWarmWindowMat = null;
+        let sharedFlowerMat = null;
+        function getPorchBulbMat() {
+            if (!sharedPorchBulbMat) {
+                sharedPorchBulbMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xffb76b, emissiveIntensity: 0.8 });
+                if (MO.resources && MO.resources.protectMaterials) {
+                    MO.resources.protectMaterials([sharedPorchBulbMat]);
+                }
+            }
+            return sharedPorchBulbMat;
+        }
+        function getWarmWindowMat() {
+            if (!sharedWarmWindowMat) {
+                sharedWarmWindowMat = new THREE.MeshStandardMaterial({
+                    color: 0xfde68a, emissive: 0xf59e0b, emissiveIntensity: 0.15, roughness: 0.25
+                });
+                if (MO.resources && MO.resources.protectMaterials) {
+                    MO.resources.protectMaterials([sharedWarmWindowMat]);
+                }
+            }
+            return sharedWarmWindowMat;
+        }
+        function getFlowerMat() {
+            if (!sharedFlowerMat) {
+                sharedFlowerMat = new THREE.MeshStandardMaterial({ color: 0xf43f5e, roughness: 0.7 });
+                if (MO.resources && MO.resources.protectMaterials) {
+                    MO.resources.protectMaterials([sharedFlowerMat]);
+                }
+            }
+            return sharedFlowerMat;
+        }
+        function updateWarmWindowGlow(isNight) {
+            if (sharedWarmWindowMat) {
+                sharedWarmWindowMat.emissiveIntensity = isNight ? 1.65 : 0.15;
+            }
+        }
+
+        function addInhabitedHouseProps(archiveGroup, record) {
+            if (!archiveGroup || !record || record.mode !== 'house') return;
+            const lot = MO.regionManager ? MO.regionManager.getLot(record.lotId) : null;
+            let hx = lot ? lot.originX : -4.4;
+            let hz = lot ? lot.originZ : -4.6;
+            const snap = record.blueprintSnapshot;
+            if (!lot && snap && Array.isArray(snap.occupiedCells) && snap.occupiedCells.length > 0 && MO.gridToWorldCenter) {
+                let sx = 0, sz = 0;
+                snap.occupiedCells.forEach(k => {
+                    const [gx, gz] = k.split(',').map(Number);
+                    const c = MO.gridToWorldCenter(gx, gz);
+                    sx += c.x; sz += c.z;
+                });
+                hx = sx / snap.occupiedCells.length;
+                hz = sz / snap.occupiedCells.length;
+            }
+            const baseY = (snap && snap.houseBaseY !== undefined)
+                ? snap.houseBaseY
+                : (MO.PLATEAU_Y || 0.28);
+
+            // Chaminé com fumaça suave (P2.2 + P3.0)
+            const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.75, 0.26), MO.mats.brickCeramic);
+            const chX = hx + 0.45;
+            const chY = baseY + 2.15;
+            const chZ = hz - 0.35;
+            chimney.position.set(chX, chY, chZ);
+            chimney.castShadow = true;
+            archiveGroup.add(chimney);
+
+            if (MO.state && MO.state.village && Array.isArray(MO.state.village.chimneys)) {
+                MO.state.village.chimneys.push({ lotId: record.lotId, x: chX, y: chY + 0.42, z: chZ });
+            }
+
+            // Banco de jardim + floreira na entrada da casa
+            const benchY = (MO.getTerrainHeight ? MO.getTerrainHeight(hx + 1.5, hz + 1.35) : baseY) + 0.14;
+            const bench = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.12, 0.28), MO.mats.doorWood);
+            bench.position.set(hx + 1.5, benchY, hz + 1.35);
+            bench.castShadow = true;
+            const planter = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.24), MO.mats.brickCeramic);
+            planter.position.set(hx - 1.4, benchY, hz + 1.35);
+            const flower1 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), getFlowerMat());
+            flower1.position.set(hx - 1.48, benchY + 0.13, hz + 1.35);
+            const flower2 = flower1.clone();
+            flower2.position.set(hx - 1.32, benchY + 0.13, hz + 1.35);
+            archiveGroup.add(bench, planter, flower1, flower2);
+
+            // Painéis de janela com brilho quente interno à noite (P3.0)
+            const winMat = getWarmWindowMat();
+            [-0.82, 0.82].forEach(wx => {
+                const winPane = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.04), winMat);
+                winPane.position.set(hx + wx, baseY + 1.05, hz + 1.02);
+                archiveGroup.add(winPane);
+            });
+
+            // Poste/lanterna acolhedora noturna na fachada
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.15, 6), MO.mats.steel);
+            post.position.set(hx + 1.25, benchY + 0.42, hz + 1.65);
+            const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), getPorchBulbMat());
+            bulb.position.set(hx + 1.25, benchY + 1.02, hz + 1.65);
+            const porchLight = new THREE.PointLight(0xffb76b, MO.state.isNight ? 2.0 : 0.3, 4.8);
+            porchLight.position.set(hx + 1.25, benchY + 1.0, hz + 1.75);
+            archiveGroup.add(post, bulb, porchLight);
+
+            if (!Array.isArray(record.lights)) record.lights = [];
+            record.lights.push({ light: porchLight, bulb });
+        }
+
         function archiveActiveConstruction(regionManager) {
             const state = MO.state;
             let active = activeConstructionId ? constructions.get(activeConstructionId) : null;
@@ -256,6 +389,7 @@
 
             if (state.mode === 'house') {
                 active.lights = (state.elecLights || []).slice();
+                addInhabitedHouseProps(archiveGroup, active);
             } else if (state.mode === 'bridge' && state.bridge) {
                 active.lights = (state.bridge.lamps || []).slice();
                 if (state.villageInfra) state.villageInfra.bridgeUnlocked = true;
@@ -276,6 +410,7 @@
             }
 
             activeConstructionId = null;
+            if (MO.invalidateNavigationCache) MO.invalidateNavigationCache();
             return active;
         }
 
@@ -298,6 +433,10 @@
         function clearAll() {
             if (MO.groups && MO.groups.archivedConstructions && MO.resources) {
                 MO.resources.clearGroup(MO.groups.archivedConstructions);
+            }
+            if (MO.state && MO.state.village) {
+                MO.state.village.chimneys = [];
+                MO.state.village.plazas = [];
             }
             constructions.clear();
             activeConstructionId = null;
@@ -423,6 +562,7 @@
             }
             record.group = archiveGroup;
             record.obstacles = extractObstaclesFromState(state);
+            addInhabitedHouseProps(archiveGroup, record);
             clearActiveConstructionGroups();
 
             state.occupiedCells.clear();
@@ -434,19 +574,141 @@
             state.furnitureBuilt = false;
             state.roofStage = 0;
             state.mode = prevMode;
+            if (MO.invalidateNavigationCache) MO.invalidateNavigationCache();
             return record;
+        }
+
+        function finalizeArchivedRebuild(record, mode, regionManager, prevActiveLotId) {
+            const state = MO.state;
+            const archiveGroup = new THREE.Group();
+            archiveGroup.name = record.id;
+            reparentActiveModeMeshes(mode, archiveGroup);
+            if (MO.groups && MO.groups.archivedConstructions) {
+                MO.groups.archivedConstructions.add(archiveGroup);
+            }
+            record.group = archiveGroup;
+            record.obstacles = extractObstaclesFromState(state);
+            if (mode === 'bridge' && state.bridge) {
+                record.lights = (state.bridge.lamps || []).slice();
+                if (state.villageInfra) state.villageInfra.bridgeUnlocked = true;
+            } else if (mode === 'building' && state.building) {
+                record.lights = (state.building.floors || []).filter(f => f.light).map(f => ({ light: f.light }));
+            } else if (mode === 'tower' && state.tower && state.tower.beaconLight) {
+                record.lights = [{ light: state.tower.beaconLight, bulb: state.tower.beaconMesh }];
+            }
+            clearActiveConstructionGroups();
+            if (regionManager && prevActiveLotId) {
+                regionManager.setActiveLot(prevActiveLotId);
+            }
+            if (MO.invalidateNavigationCache) MO.invalidateNavigationCache();
+            return record;
+        }
+
+        function rebuildArchivedBridgeFromSnapshot(record, regionManager) {
+            if (!MO.modes.bridge || !MO.bridgeHelpers) return null;
+            const state = MO.state;
+            const prevMode = state.mode;
+            const prevSeed = state.seed;
+            const prevActiveLotId = regionManager ? (regionManager.getActiveLot() || {}).id : null;
+            const snap = record.blueprintSnapshot || {};
+
+            if (regionManager && record.lotId) regionManager.setActiveLot(record.lotId);
+            state.mode = 'bridge';
+            if (snap.seed !== undefined) state.seed = snap.seed;
+            MO.modes.bridge.onInit();
+            const h = MO.bridgeHelpers;
+            const br = state.bridge;
+            br.abutments.forEach(a => h.buildAbutment(a));
+            br.piers.forEach(p => { h.drivePierPiles(p); h.buildPierCofferdam(p); h.concreteBridgePier(p); });
+            br.girders.forEach(s => { h.installBridgeGirder(s); h.installBridgeDeck(s); h.installBridgeRails(s); });
+            br.loadPassed = true;
+            if (state.villageInfra) state.villageInfra.bridgeUnlocked = true;
+
+            const out = finalizeArchivedRebuild(record, 'bridge', regionManager, prevActiveLotId);
+            state.mode = prevMode;
+            state.seed = prevSeed;
+            return out;
+        }
+
+        function rebuildArchivedBuildingFromSnapshot(record, regionManager) {
+            if (!MO.modes.building || !MO.buildingHelpers) return null;
+            const state = MO.state;
+            const prevMode = state.mode;
+            const prevSeed = state.seed;
+            const prevActiveLotId = regionManager ? (regionManager.getActiveLot() || {}).id : null;
+            const snap = record.blueprintSnapshot || {};
+
+            if (regionManager && record.lotId) regionManager.setActiveLot(record.lotId);
+            state.mode = 'building';
+            if (snap.seed !== undefined) state.seed = snap.seed;
+            MO.modes.building.onInit();
+            const h = MO.buildingHelpers;
+            const bld = state.building;
+            bld.floors.forEach(fl => {
+                h.buildFloorStructure(fl);
+                h.pourFloorSlab(fl);
+                h.buildFloorWalls(fl);
+                h.installFloorMEP(fl);
+                h.finishFloorFacade(fl);
+            });
+            h.finishBuildingRoof(true);
+            if (MO.setBuildingFloorCut) MO.setBuildingFloorCut(bld.numFloors);
+
+            const out = finalizeArchivedRebuild(record, 'building', regionManager, prevActiveLotId);
+            state.mode = prevMode;
+            state.seed = prevSeed;
+            return out;
+        }
+
+        function rebuildArchivedTowerFromSnapshot(record, regionManager) {
+            if (!MO.modes.tower || !MO.towerHelpers) return null;
+            const state = MO.state;
+            const prevMode = state.mode;
+            const prevSeed = state.seed;
+            const prevActiveLotId = regionManager ? (regionManager.getActiveLot() || {}).id : null;
+            const snap = record.blueprintSnapshot || {};
+
+            if (regionManager && record.lotId) regionManager.setActiveLot(record.lotId);
+            state.mode = 'tower';
+            if (snap.seed !== undefined) state.seed = snap.seed;
+            MO.modes.tower.onInit();
+            const h = MO.towerHelpers;
+            const tw = state.tower;
+            tw.footings.forEach(f => { h.digTowerFooting(f); h.rebarTowerFooting(f); h.concreteTowerFooting(f); });
+            tw.tiers.forEach(t => { h.installTierScaffold(t); h.installTierSteel(t); });
+            h.installTowerTop();
+            tw.windPassed = true;
+
+            const out = finalizeArchivedRebuild(record, 'tower', regionManager, prevActiveLotId);
+            state.mode = prevMode;
+            state.seed = prevSeed;
+            return out;
+        }
+
+        function rebuildArchivedFromSnapshot(record, regionManager) {
+            if (!record) return null;
+            if (record.mode === 'house') return rebuildArchivedHouseFromSnapshot(record);
+            if (record.mode === 'bridge') return rebuildArchivedBridgeFromSnapshot(record, regionManager);
+            if (record.mode === 'building') return rebuildArchivedBuildingFromSnapshot(record, regionManager);
+            if (record.mode === 'tower') return rebuildArchivedTowerFromSnapshot(record, regionManager);
+            return null;
         }
 
         return {
             startConstruction,
             archiveActiveConstruction,
             rebuildArchivedHouseFromSnapshot,
+            rebuildArchivedBridgeFromSnapshot,
+            rebuildArchivedBuildingFromSnapshot,
+            rebuildArchivedTowerFromSnapshot,
+            rebuildArchivedFromSnapshot,
             extractObstaclesFromState,
             captureBlueprintSnapshot,
             getActiveConstruction,
             getConstruction,
             getAllConstructions,
             getCompletedConstructions,
+            updateWarmWindowGlow,
             clearAll,
             serialize,
             restore

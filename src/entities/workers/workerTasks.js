@@ -19,6 +19,8 @@
         if (tk.pickedBeam && !tk.pickedBeam.used) tk.pickedBeam.res = false;
         if (tk.pickedSupply && !tk.pickedSupply.consumed) tk.pickedSupply.res = false;
         if (tk.roadSeg) tk.roadSeg.res = false;
+        if (tk.cityStruct) tk.cityStruct.res = false;
+        if (tk.resourceNode) tk.resourceNode.res = false;
         if (tk.type === 'saw-wood' && MO.state.workbench) MO.state.workbench.busyWorkerId = null;
         if (MO.state.villageInfra) {
             if (tk.type === 'build-unloading') MO.state.villageInfra.unloadingRes = false;
@@ -97,10 +99,17 @@
         const state = MO.state;
         const setWorkerTool = MO.workerFactory.setWorkerTool;
         const wallTarget = tk.wall || (tk.slot ? tk.slot.wallRef : null);
+        const isPlayerDriven = Boolean(state.cityMode && state.city && state.city.playerDriven);
+        const infra = state.villageInfra;
 
         if (tk.type === 'brick' || tk.type === 'muro') {
             const brick = state.looseBricks.find(b => !b.placed && !b.res);
             if (!brick) {
+                if (isPlayerDriven && (!infra || !infra.unloadingBuilt || !infra.yardsBuilt)) {
+                    tk.subPhase = 'work';
+                    setDestination(w, w.tx, w.tz, wallTarget);
+                    return true;
+                }
                 releaseTaskReservations(tk);
                 w.task = null;
                 if (MO.requestSupplyTruck) MO.requestSupplyTruck('bricks');
@@ -122,6 +131,11 @@
         if (tk.type === 'rebar' || tk.type === 'tw-rebar') {
             const rb = state.looseRebars.find(r => !r.installed && !r.res);
             if (!rb) {
+                if (isPlayerDriven && (!infra || !infra.unloadingBuilt || !infra.yardsBuilt)) {
+                    tk.subPhase = 'work';
+                    setDestination(w, w.tx, w.tz, wallTarget);
+                    return true;
+                }
                 releaseTaskReservations(tk);
                 w.task = null;
                 if (MO.requestSupplyTruck) MO.requestSupplyTruck('rebars');
@@ -144,7 +158,7 @@
             tk.type === 'br-coffer' || tk.type === 'br-girder' || tk.type === 'bld-struct' || tk.type === 'tw-scaf' || tk.type === 'tw-steel'
         ) {
             const isSteelBeam = (tk.type === 'br-girder' || tk.type === 'tw-steel');
-            if (!isSteelBeam && state.unifiedVillage && state.villageInfra && state.villageInfra.workbenchBuilt && state.workbench) {
+            if (!isSteelBeam && state.unifiedVillage && infra && infra.workbenchBuilt && state.workbench) {
                 if (state.workbench.cutWood > 0) {
                     tk.needsCutWood = true;
                     tk.subPhase = 'pickup';
@@ -162,7 +176,7 @@
                 if (state.workbench.rawWood > 0 && state.workbench.busyWorkerId === null) {
                     return trySawWoodAtWorkbench(w, setDestination, setWorkerTool);
                 }
-                if (state.villageInfra.roadBuilt && state.villageInfra.unloadingBuilt && MO.requestSupplyTruck) {
+                if (infra.roadBuilt && infra.unloadingBuilt && MO.requestSupplyTruck) {
                     MO.requestSupplyTruck('wood');
                 }
                 return false;
@@ -171,6 +185,11 @@
             const beam = state.looseBeams.find(b => !b.used && !b.res && b.kind === wantKind)
                       || state.looseBeams.find(b => !b.used && !b.res);
             if (!beam) {
+                if (isPlayerDriven && (!infra || !infra.workbenchBuilt || !infra.yardsBuilt)) {
+                    tk.subPhase = 'work';
+                    setDestination(w, w.tx, w.tz, wallTarget);
+                    return true;
+                }
                 releaseTaskReservations(tk);
                 w.task = null;
                 if (MO.requestSupplyTruck) MO.requestSupplyTruck('beams');
@@ -197,6 +216,11 @@
             tk.carryTool = useWheelbarrow ? 'wheelbarrow' : 'bucket';
             if (state.bucketCharges < 0.5) {
                 if (state.mortarCharges <= 0) {
+                    if (isPlayerDriven && (!infra || !infra.mixerBuilt)) {
+                        tk.subPhase = 'work';
+                        setDestination(w, w.tx, w.tz, wallTarget);
+                        return true;
+                    }
                     releaseTaskReservations(tk);
                     w.task = null;
                     return false;
@@ -250,6 +274,34 @@
         if (!state.unifiedVillage || w.role !== 'supervisor') return false;
         const infra = state.villageInfra;
         if (!infra) return false;
+        const playerDriven = Boolean(state.cityMode && state.city && state.city.playerDriven);
+
+        if (playerDriven) {
+            if (infra.roadBuilt && infra.unloadingBuilt && infra.workbenchBuilt && state.workbench && state.workbench.rawWood <= 0 && state.workbench.cutWood <= 1 && !state.site.truckActive && MO.requestSupplyTruck) {
+                MO.requestSupplyTruck('wood');
+            }
+            const activeLot = (MO.worldManager && MO.worldManager.getActiveLotOrigin && MO.regionManager && MO.regionManager.getActiveLot())
+                ? MO.worldManager.getActiveLotOrigin()
+                : null;
+            const lastStruct = (state.city && state.city.structures && state.city.structures.length > 0)
+                ? state.city.structures[state.city.structures.length - 1]
+                : null;
+            const targetSpot = activeLot || lastStruct || MO.STATION_TOOLBOX || { x: -2.2, z: 2.0 };
+            w.task = { type: 'inspect-site', duration: 1.6, subPhase: 'work' };
+            setDest(w, targetSpot.x - 1.1, targetSpot.z + 1.4);
+            setWorkerTool(w.rig, 'clipboard');
+            w.rig.setBadge('👷‍♂️');
+            if (!infra.unloadingBuilt) {
+                w.statusText = 'Aguardando Baia de Descarga (Apoio)';
+            } else if (!infra.mixerBuilt) {
+                w.statusText = 'Aguardando Masseira (Apoio)';
+            } else if (!infra.workbenchBuilt) {
+                w.statusText = 'Aguardando Bancada (Apoio)';
+            } else {
+                w.statusText = 'Supervisionando obras da sua cidade';
+            }
+            return true;
+        }
 
         if (!infra.demarcated) {
             w.task = { type: 'demarcate-site', duration: 0.90, subPhase: 'work' };
@@ -285,20 +337,36 @@
         const state = MO.state;
         if (!state.unifiedVillage || w.role === 'supervisor') return false;
         const infra = state.villageInfra;
-        if (!infra || !infra.demarcated) return false;
+        if (!infra) return false;
+        const playerDriven = Boolean(state.cityMode && state.city && state.city.playerDriven);
+        if (!playerDriven && !infra.demarcated) return false;
 
-        const seg = infra.roadSegments.find(s => !s.built && !s.res && (s.bank === 'west' || infra.bridgeUnlocked));
+        const seg = infra.roadSegments.find(s => !s.built && !s.res && (s.bank === 'west' || s.bank === 'city' || infra.bridgeUnlocked));
         if (seg) {
             seg.res = true;
             w.task = { type: 'build-road', roadSeg: seg, duration: 0.42, subPhase: 'work' };
             setDest(w, seg.x, seg.z);
             setWorkerTool(w.rig, 'hoe');
-            w.rig.setBadge('🛣️');
-            w.statusText = 'Abrindo estrada de terra para entregas';
+            w.rig.setBadge(seg.kind === 'paved' ? '🏙️' : '🛣️');
+            w.statusText = seg.kind === 'paved' ? 'Pavimentando rua da cidade' : 'Abrindo estrada de terra para entregas';
             return true;
         }
 
-        if (!infra.unloadingBuilt && !infra.unloadingRes) {
+        // Estruturas produtivas colocadas pelo jogador na cidade (Fazenda, Serraria, Mina, Mercado)
+        const citySt = (state.city && Array.isArray(state.city.structures))
+            ? state.city.structures.find(st => !st.built && !st.res)
+            : null;
+        if (citySt) {
+            citySt.res = true;
+            w.task = { type: 'build-city-struct', cityStruct: citySt, duration: 0.85, subPhase: 'work' };
+            setDest(w, citySt.x, citySt.z + 1.05);
+            setWorkerTool(w.rig, 'hammer');
+            w.rig.setBadge('🏗️');
+            w.statusText = `Construindo ${citySt.kind}`;
+            return true;
+        }
+
+        if ((!playerDriven || infra.unloadingPlaced) && !infra.unloadingBuilt && !infra.unloadingRes) {
             infra.unloadingRes = true;
             w.task = { type: 'build-unloading', duration: 0.55, subPhase: 'work' };
             setDest(w, MO.STATION_UNLOAD.x, MO.STATION_UNLOAD.z + 0.9);
@@ -308,7 +376,7 @@
             return true;
         }
 
-        if (!infra.mixerBuilt && !infra.mixerRes) {
+        if ((!playerDriven || infra.mixerPlaced) && !infra.mixerBuilt && !infra.mixerRes) {
             infra.mixerRes = true;
             w.task = { type: 'build-mixer', duration: 0.56, subPhase: 'work' };
             setDest(w, MO.STATION_MIXER.x, MO.STATION_MIXER.z + 0.9);
@@ -318,7 +386,7 @@
             return true;
         }
 
-        if (!infra.workbenchBuilt && !infra.workbenchRes) {
+        if ((!playerDriven || infra.workbenchPlaced) && !infra.workbenchBuilt && !infra.workbenchRes) {
             infra.workbenchRes = true;
             w.task = { type: 'build-workbench', duration: 0.60, subPhase: 'work' };
             setDest(w, MO.STATION_WORKBENCH.x, MO.STATION_WORKBENCH.z + 0.85);
@@ -328,7 +396,7 @@
             return true;
         }
 
-        if (!infra.yardsBuilt && !infra.yardsRes) {
+        if ((!playerDriven || infra.yardsPlaced) && !infra.stockYardsBuilt && !infra.yardsBuilt && !infra.yardsRes) {
             infra.yardsRes = true;
             w.task = { type: 'build-yards', duration: 0.52, subPhase: 'work' };
             setDest(w, MO.STATION_BRICK.x, MO.STATION_BRICK.z + 0.8);
@@ -338,6 +406,78 @@
             return true;
         }
 
+        return false;
+    }
+
+    function tryAssignProfessionTask(w, setDest, setWorkerTool) {
+        const state = MO.state;
+        const pos = w.rig && w.rig.group ? w.rig.group.position : { x: 0, z: 0 };
+
+        if (w.role === 'lumberjack' || w.specialty === 'lumberjack') {
+            const trees = MO.chunkManager ? MO.chunkManager.getLoadedResourceNodes('wood').filter(n => !n.res) : [];
+            if (trees.length > 0) {
+                trees.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
+                const node = trees[0];
+                node.res = true;
+                w.task = { type: 'harvest-wood', resourceNode: node, duration: 1.15, subPhase: 'work' };
+                setDest(w, node.x, node.z + 0.65);
+                setWorkerTool(w.rig, 'hammer');
+                w.rig.setBadge('🪓');
+                w.statusText = 'Cortando madeira na floresta';
+                return true;
+            }
+        }
+
+        if (w.role === 'miner' || w.specialty === 'miner') {
+            const ores = MO.chunkManager
+                ? MO.chunkManager.getLoadedResourceNodes().filter(n => !n.res && (n.kind === 'mine' || n.kind === 'stone' || n.kind === 'iron'))
+                : [];
+            if (ores.length > 0) {
+                ores.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
+                const node = ores[0];
+                node.res = true;
+                w.task = { type: 'harvest-ore', resourceNode: node, duration: 1.25, subPhase: 'work' };
+                setDest(w, node.x, node.z + 0.75);
+                setWorkerTool(w.rig, 'hoe');
+                w.rig.setBadge('⛏️');
+                w.statusText = node.kind === 'mine'
+                    ? 'Minerando caverna natural'
+                    : (node.kind === 'iron' ? 'Minerando minério de ferro' : 'Extraindo pedra natural');
+                return true;
+            }
+            const mine = state.city && state.city.structures.find(st => st.kind === 'mine' && st.built);
+            if (mine) {
+                w.task = { type: 'harvest-ore', cityStruct: mine, duration: 1.3, subPhase: 'work' };
+                setDest(w, mine.x, mine.z + 1.0);
+                setWorkerTool(w.rig, 'hoe');
+                w.rig.setBadge('⛏️');
+                w.statusText = 'Trabalhando na mina da cidade';
+                return true;
+            }
+        }
+
+        if (w.role === 'farmer' || w.specialty === 'farmer') {
+            const farm = state.city && state.city.structures.find(st => st.kind === 'farm' && st.built);
+            if (farm) {
+                w.task = { type: 'work-farm', cityStruct: farm, duration: 1.35, subPhase: 'work' };
+                setDest(w, farm.x, farm.z + 0.9);
+                setWorkerTool(w.rig, 'hoe');
+                w.rig.setBadge('🌾');
+                w.statusText = 'Cultivando colheita na fazenda';
+                return true;
+            }
+        }
+
+        if (w.role === 'merchant' || w.specialty === 'merchant') {
+            const market = state.city && state.city.structures.find(st => st.kind === 'market' && st.built);
+            const target = market || MO.STATION_UNLOAD || MO.STATION_TOOLBOX;
+            w.task = { type: 'work-market', cityStruct: market || null, duration: 1.5, subPhase: 'work' };
+            setDest(w, target.x, target.z + 0.95);
+            setWorkerTool(w.rig, 'clipboard');
+            w.rig.setBadge('🪙');
+            w.statusText = market ? 'Comercializando no mercado' : 'Negociando entregas na cidade';
+            return true;
+        }
         return false;
     }
 
@@ -355,9 +495,11 @@
         if (assignCampOrLifeTask(w, setDestination, setWorkerTool, t, false)) return;
 
         if (tryAssignSupervisorTask(w, setDestination, setWorkerTool)) return;
+        if (tryAssignProfessionTask(w, setDestination, setWorkerTool)) return;
         if (tryAssignInfrastructureTask(w, setDestination, setWorkerTool)) return;
 
-        if (state.unifiedVillage && state.villageInfra && !state.villageInfra.demarcated) {
+        const isPlayerDriven = Boolean(state.cityMode && state.city && state.city.playerDriven);
+        if (!isPlayerDriven && state.unifiedVillage && state.villageInfra && !state.villageInfra.demarcated) {
             assignCampOrLifeTask(w, setDestination, setWorkerTool, t, true);
             return;
         }
@@ -385,7 +527,7 @@
             }
         }
 
-        if (state.unifiedVillage && state.villageInfra && (!state.villageInfra.roadBuilt || !state.villageInfra.mixerBuilt || !state.villageInfra.workbenchBuilt)) {
+        if (!isPlayerDriven && state.unifiedVillage && state.villageInfra && (!state.villageInfra.roadBuilt || !state.villageInfra.mixerBuilt || !state.villageInfra.workbenchBuilt)) {
             assignCampOrLifeTask(w, setDestination, setWorkerTool, t, true);
             return;
         }

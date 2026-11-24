@@ -74,22 +74,39 @@
     }
 
     function sampleLevelWeight(x, z) {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            const c = MO.chunkManager.getLevelCell(x, z);
+            if (c) return c.weight;
+        }
         return sampleMapWeight(MO.levelMap, x, z);
     }
 
     function paintLevelWeight(wx, wz, radius, strength) {
         paintMapWeight(MO.levelMap, wx, wz, radius, strength);
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            MO.chunkManager.paintLevelArea(wx, wz, radius, strength, MO.PLATEAU_Y);
+        }
     }
 
     function sampleRoadWeight(x, z) {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            const r = MO.chunkManager.getRoadCell(x, z);
+            if (r) return r.built ? 1.0 : 0.45;
+        }
         return sampleMapWeight(MO.roadMap, x, z);
     }
 
-    function paintRoadWeight(wx, wz, radius, strength) {
+    function paintRoadWeight(wx, wz, radius, strength, kind = 'dirt', built = true) {
         paintMapWeight(MO.roadMap, wx, wz, radius, strength);
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            MO.chunkManager.paintRoadCell(wx, wz, kind, built, Math.max(1, Math.round(radius)));
+        }
     }
 
     function getRiverCenterX(z, seed) {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            return MO.chunkManager.getRiverCenterX(z, seed);
+        }
         const s = seed !== undefined ? seed : MO.state.seed;
         const baseShift = ((s % 5) - 2) * 0.35;
         return 1.6 + baseShift + Math.sin(z * 0.28 + (s % 11)) * 0.55;
@@ -103,8 +120,11 @@
         };
     }
 
-    // FONTE ÚNICA DA VERDADE DE ELEVAÇÃO PARA O MAPA UNIFICADO DA VILA
+    // FONTE ÚNICA DA VERDADE DE ELEVAÇÃO PARA O TERRENO (CHUNKS INFINITOS OU DIORAMA)
     function getTerrainHeight(x, z) {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            return MO.chunkManager.getHeightAt(x, z);
+        }
         const s = MO.state.seed;
         const mode = MO.state.mode;
         let h = 0.24 + fbmNoise(x, z, s) * 0.58;
@@ -205,6 +225,10 @@
     MO.getTerrainHeight = getTerrainHeight;
 
     MO.createDioramaBase = function() {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            MO.chunkManager.updateAround(0, 0);
+            return;
+        }
         const dioramaGroup = MO.groups.diorama;
         const woodBase = new THREE.Mesh(
             new THREE.CylinderGeometry(MO.DIORAMA_R + 0.16, MO.DIORAMA_R + 0.28, 1.35, 72),
@@ -298,6 +322,16 @@
     };
 
     MO.createProceduralTerrainMesh = function() {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            if (MO.terrainSkirtMesh && MO.groups && MO.groups.diorama) {
+                MO.resources.removeAndDispose(MO.groups.diorama, MO.terrainSkirtMesh);
+                MO.terrainSkirtMesh = null;
+            }
+            MO.chunkManager.init();
+            MO.updateTerrainGridLines();
+            MO.updatePhase0StatusPills();
+            return;
+        }
         const dioramaGroup = MO.groups.diorama;
         if (MO.terrainMesh) {
             MO.resources.removeAndDispose(dioramaGroup, MO.terrainMesh);
@@ -392,6 +426,17 @@
     const tmpColor = new THREE.Color();
 
     MO.updateTerrainGeometry = function() {
+        if (MO.state && MO.state.infiniteWorld && MO.chunkManager) {
+            MO.chunkManager.refreshAllLoadedChunks();
+            if (MO.state.weeds && MO.state.weeds.length > 0) {
+                MO.state.weeds.forEach(w => {
+                    if (!w.cleared && w.mesh) w.mesh.position.y = getTerrainHeight(w.x, w.z);
+                });
+            }
+            MO.updateTerrainGridLines();
+            MO.updatePhase0StatusPills();
+            return;
+        }
         if (!MO.terrainMesh) return;
         const state = MO.state;
         const biome = (MO.BIOMES && MO.BIOMES[state.biome]) || (MO.BIOMES && MO.BIOMES.forest);
@@ -456,7 +501,7 @@
             MO.resources.removeAndDispose(MO.scene, MO.terrainGridLines);
             MO.terrainGridLines = null;
         }
-        if (MO.state.mode !== 'house' || MO.state.phase > 1) return;
+        if (MO.state.cityMode || MO.state.mode !== 'house' || MO.state.phase > 1) return;
 
         const pts = [];
         const half = MO.GRID_SIZE / 2;
@@ -500,6 +545,18 @@
         if (MO.terrainGridLines) MO.terrainGridLines.visible = false;
     };
 
+    const cachedTreeMats = new Map();
+    function getTreeFoliageMat(biomeId, hex) {
+        const key = `${biomeId}|${hex}`;
+        if (cachedTreeMats.has(key)) return cachedTreeMats.get(key);
+        const mat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.92, flatShading: true });
+        if (MO.resources && MO.resources.protectMaterials) {
+            MO.resources.protectMaterials([mat]);
+        }
+        cachedTreeMats.set(key, mat);
+        return mat;
+    }
+
     function createRealisticTree(x, z, scale, isConifer) {
         const y = getTerrainHeight(x, z);
         if (y < MO.WATER_LEVEL + 0.14) return;
@@ -515,7 +572,7 @@
             trunk.rotation.z = 0.12;
             trunk.castShadow = true;
             tree.add(trunk);
-            const frondMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.85, flatShading: true });
+            const frondMat = getTreeFoliageMat(biomeId, 0x3f6212);
             for (let i = 0; i < 6; i++) {
                 const ang = (i / 6) * Math.PI * 2;
                 const frond = new THREE.Mesh(new THREE.BoxGeometry(0.95 * scale, 0.05, 0.24 * scale), frondMat);
@@ -545,7 +602,7 @@
 
         if (isConifer && biomeId !== 'cerrado') {
             for (let i = 0; i < 4; i++) {
-                const mat = new THREE.MeshStandardMaterial({ color: greens[i % greens.length], roughness: 0.94, flatShading: true });
+                const mat = getTreeFoliageMat(biomeId, greens[i % greens.length]);
                 const cone = new THREE.Mesh(new THREE.ConeGeometry((0.92 - i * 0.18) * scale, (1.12 - i * 0.1) * scale, 7), mat);
                 cone.position.y = trunkH * 0.55 + i * 0.5 * scale;
                 cone.rotation.y = i * 0.8;
@@ -558,7 +615,7 @@
                 const ang = (i / 14) * Math.PI * 2 + (i * 0.37);
                 const rad = (i < 3 ? 0.14 : 0.34 + (i % 3) * 0.16) * scale;
                 const py = trunkH + (0.15 + (i % 4) * 0.22) * scale;
-                const mat = new THREE.MeshStandardMaterial({ color: greens[i % greens.length], roughness: 0.95, flatShading: true });
+                const mat = getTreeFoliageMat(biomeId, greens[i % greens.length]);
                 const clump = new THREE.Mesh(new THREE.IcosahedronGeometry((0.26 + (i % 3) * 0.07) * scale, 0), mat);
                 clump.position.set(Math.cos(ang) * rad, py, Math.sin(ang) * rad);
                 clump.scale.set(1.25, 0.72, 1.15);
@@ -579,18 +636,20 @@
         MO.resources.clearGroup(splatGroup);
 
         const s = MO.state.seed;
-        for (let i = 0; i < 22; i++) {
-            const ang = (i / 22) * Math.PI * 2 + hash2D(i, 11, s) * 0.35;
-            const dist = (MO.DIORAMA_R - 2.6) + hash2D(i, 22, s) * 1.9;
-            const tx = Math.cos(ang) * dist;
-            const tz = Math.sin(ang) * dist;
-            if (MO.STATION_ROAD_ENTRY && Math.hypot(tx - MO.STATION_ROAD_ENTRY.x, tz - MO.STATION_ROAD_ENTRY.z) < 2.5) continue;
-            if (Math.hypot(tx - MO.STATION_MIXER.x, tz - MO.STATION_MIXER.z) < 2.2) continue;
-            if (Math.hypot(tx - MO.STATION_BRICK.x, tz - MO.STATION_BRICK.z) < 2.0) continue;
-            if (Math.hypot(tx - MO.STATION_REBAR.x, tz - MO.STATION_REBAR.z) < 1.9) continue;
-            if (MO.state.mode === 'bridge' && Math.abs(tz) < 2.2) continue;
-            const scale = 0.85 + hash2D(i, 33, s) * 0.55;
-            createRealisticTree(tx, tz, scale, hash2D(i, 44, s) > 0.45);
+        if (!MO.state.infiniteWorld) {
+            for (let i = 0; i < 22; i++) {
+                const ang = (i / 22) * Math.PI * 2 + hash2D(i, 11, s) * 0.35;
+                const dist = (MO.DIORAMA_R - 2.6) + hash2D(i, 22, s) * 1.9;
+                const tx = Math.cos(ang) * dist;
+                const tz = Math.sin(ang) * dist;
+                if (MO.STATION_ROAD_ENTRY && Math.hypot(tx - MO.STATION_ROAD_ENTRY.x, tz - MO.STATION_ROAD_ENTRY.z) < 2.5) continue;
+                if (Math.hypot(tx - MO.STATION_MIXER.x, tz - MO.STATION_MIXER.z) < 2.2) continue;
+                if (Math.hypot(tx - MO.STATION_BRICK.x, tz - MO.STATION_BRICK.z) < 2.0) continue;
+                if (Math.hypot(tx - MO.STATION_REBAR.x, tz - MO.STATION_REBAR.z) < 1.9) continue;
+                if (MO.state.mode === 'bridge' && Math.abs(tz) < 2.2) continue;
+                const scale = 0.85 + hash2D(i, 33, s) * 0.55;
+                createRealisticTree(tx, tz, scale, hash2D(i, 44, s) > 0.45);
+            }
         }
 
         for (let i = 0; i < 22; i++) {

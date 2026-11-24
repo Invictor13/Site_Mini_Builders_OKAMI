@@ -5,9 +5,10 @@
     MO.BIOMES = {
         forest: {
             id: 'forest', label: 'Floresta',
-            grassDark: '#344528', grassLight: '#465934', earthPad: '#7a654d',
-            pondBed: '#1d2a2d', rockSlope: '#52544f', waterColor: 0x164252,
-            bgGradient: 'radial-gradient(circle at 50% 42%, #1e2631 0%, #11161f 62%, #090c12 100%)'
+            grassDark: '#3b6e2c', grassLight: '#65a33e', earthPad: '#a17c52',
+            pondBed: '#164e63', rockSlope: '#78716c', sandShore: '#d6c391', snowPeak: '#f1f5f9',
+            waterColor: 0x1ea3c4,
+            bgGradient: 'linear-gradient(180deg, #38bdf8 0%, #7dd3fc 42%, #bae6fd 72%, #1e3a5f 100%)'
         },
         coast: {
             id: 'coast', label: 'Litoral',
@@ -34,37 +35,76 @@
     let starsMesh = null;
     let sunDisc = null;
     let moonDisc = null;
+    let cloudMat = null;
+    const clouds = [];
 
     MO.initSkyAndWeather = function() {
         MO.scene.add(skyGroup, weatherGroup);
 
-        // Estrelas sutis que aparecem à noite
-        const sCount = 180;
+        // Nuvens low-poly estilizadas no céu alto
+        const cloudGeo = new THREE.IcosahedronGeometry(1.0, 0);
+        cloudMat = new THREE.MeshStandardMaterial({
+            color: 0xf8fafc,
+            roughness: 0.95,
+            flatShading: true,
+            transparent: true,
+            opacity: 0.92,
+            fog: false
+        });
+        if (MO.resources) MO.resources.protect(cloudGeo, cloudMat);
+        for (let i = 0; i < 9; i++) {
+            const cGrp = new THREE.Group();
+            const puffs = [
+                [0, 0, 0, 2.2, 1.05, 1.5],
+                [-1.6, -0.2, 0.2, 1.5, 0.85, 1.2],
+                [1.6, -0.25, -0.1, 1.65, 0.9, 1.25],
+                [0.4, 0.5, 0.15, 1.3, 0.8, 1.1]
+            ];
+            puffs.forEach(([px, py, pz, sx, sy, sz]) => {
+                const m = new THREE.Mesh(cloudGeo, cloudMat);
+                m.position.set(px, py, pz);
+                m.scale.set(sx, sy, sz);
+                cGrp.add(m);
+            });
+            const scale = 1.25 + (i % 3) * 0.45;
+            cGrp.scale.setScalar(scale);
+            skyGroup.add(cGrp);
+            clouds.push({
+                mesh: cGrp,
+                ox: ((i % 3) - 1) * 44 + (i * 11 % 19) - 9,
+                oz: -38 - Math.floor(i / 3) * 28,
+                y: 26 + (i % 4) * 3.2,
+                speed: 0.55 + (i % 3) * 0.25
+            });
+        }
+
+        // Cúpula celeste distante de estrelas (nunca intercepta o terreno)
+        const sCount = 220;
         const sPos = new Float32Array(sCount * 3);
         for (let i = 0; i < sCount; i++) {
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.random() * Math.PI * 0.42;
-            const r = 46;
+            const r = 185;
             sPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            sPos[i * 3 + 1] = 8 + r * Math.cos(phi);
+            sPos[i * 3 + 1] = 18 + r * Math.cos(phi);
             sPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
         }
         const sGeo = new THREE.BufferGeometry();
         sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
         starsMesh = new THREE.Points(
             sGeo,
-            new THREE.PointsMaterial({ color: 0xe2e8f0, size: 0.28, transparent: true, opacity: 0.0 })
+            new THREE.PointsMaterial({ color: 0xe2e8f0, size: 1.15, transparent: true, opacity: 0.0, fog: false })
         );
         skyGroup.add(starsMesh);
 
-        // Disco Solar e Lua
+        // Disco Solar e Lua bem distantes no horizonte celeste (fora do alcance dos chunks)
         sunDisc = new THREE.Mesh(
-            new THREE.SphereGeometry(0.95, 12, 10),
-            new THREE.MeshBasicMaterial({ color: 0xfde68a })
+            new THREE.SphereGeometry(4.6, 16, 12),
+            new THREE.MeshBasicMaterial({ color: 0xfde68a, fog: false })
         );
         moonDisc = new THREE.Mesh(
-            new THREE.SphereGeometry(0.65, 12, 10),
-            new THREE.MeshBasicMaterial({ color: 0xdbeafe })
+            new THREE.SphereGeometry(3.2, 16, 12),
+            new THREE.MeshBasicMaterial({ color: 0xdbeafe, fog: false })
         );
         skyGroup.add(sunDisc, moonDisc);
 
@@ -121,45 +161,61 @@
 
     MO.updateSkyAndWeather = function(dt, t) {
         const state = MO.state;
+        const tx = MO.camOrbit && MO.camOrbit.target ? MO.camOrbit.target.x : 0;
+        const tz = MO.camOrbit && MO.camOrbit.target ? MO.camOrbit.target.z : 0;
         const sunAngle = state.timeOfDay * Math.PI * 2;
         if (sunDisc) {
-            sunDisc.position.set(Math.cos(sunAngle) * 28, Math.sin(sunAngle) * 22 + 2, -16);
-            sunDisc.visible = Math.sin(sunAngle) > -0.1;
+            const sy = Math.sin(sunAngle) * 120 + 18;
+            sunDisc.position.set(tx + Math.cos(sunAngle) * 165, sy, tz - 115);
+            sunDisc.visible = sy > 8;
         }
         if (moonDisc) {
-            moonDisc.position.set(-Math.cos(sunAngle) * 28, -Math.sin(sunAngle) * 20 + 2, -16);
-            moonDisc.visible = Math.sin(sunAngle) < 0.15;
+            const my = -Math.sin(sunAngle) * 115 + 18;
+            moonDisc.position.set(tx - Math.cos(sunAngle) * 165, my, tz - 115);
+            moonDisc.visible = my > 8;
         }
         if (starsMesh) {
-            const targetOp = state.isNight ? 0.72 : 0.0;
+            starsMesh.position.set(tx, 0, tz);
+            const targetOp = state.isNight ? 0.78 : 0.0;
             starsMesh.material.opacity += (targetOp - starsMesh.material.opacity) * Math.min(1, dt * 1.8);
         }
+        if (clouds.length > 0) {
+            if (cloudMat && cloudMat.color) {
+                cloudMat.color.setHex(state.isNight ? 0x64748b : 0xf8fafc);
+                cloudMat.opacity = state.isNight ? 0.45 : 0.92;
+            }
+            clouds.forEach(cl => {
+                cl.ox += cl.speed * dt;
+                if (cl.ox > 85) cl.ox = -85;
+                cl.mesh.position.set(tx + cl.ox, cl.y, tz + cl.oz);
+            });
+        }
 
-        // Voo suave dos pássaros durante o dia
+        // Voo suave dos pássaros acompanhando a área da câmera
         state.site.birds.forEach((b, idx) => {
             b.mesh.visible = !state.isNight && state.weather !== 'rain';
             if (!b.mesh.visible) return;
             b.angle += b.speed * dt;
-            const x = Math.cos(b.angle) * b.radius;
-            const z = Math.sin(b.angle) * b.radius;
-            b.mesh.position.set(x, b.height + Math.sin(t * 2 + idx) * 0.25, z);
+            const x = tx + Math.cos(b.angle) * (b.radius * 1.6);
+            const z = tz + Math.sin(b.angle) * (b.radius * 1.6);
+            b.mesh.position.set(x, b.height + 1.4 + Math.sin(t * 2 + idx) * 0.25, z);
             b.mesh.rotation.y = -b.angle;
             const flap = Math.sin(t * 9 + idx * 1.7) * 0.42;
             b.wL.rotation.z = flap;
             b.wR.rotation.z = -flap;
         });
 
-        // Chuva 3D
+        // Chuva 3D sempre cobrindo o campo visível da câmera
         const raining = state.weather === 'rain';
         state.site.rainDrops.forEach(drop => {
             drop.visible = raining;
             if (!raining) return;
             drop.position.y -= dt * 16.5;
             drop.position.x -= dt * 1.4;
-            if (drop.position.y < -0.2) {
-                drop.position.y = 10.5;
-                drop.position.x = (Math.random() - 0.5) * 16;
-                drop.position.z = (Math.random() - 0.5) * 16;
+            if (drop.position.y < -0.2 || Math.abs(drop.position.x - tx) > 22 || Math.abs(drop.position.z - tz) > 22) {
+                drop.position.y = 12.5 + Math.random() * 4;
+                drop.position.x = tx + (Math.random() - 0.5) * 32;
+                drop.position.z = tz + (Math.random() - 0.5) * 32;
             }
         });
 
@@ -168,6 +224,17 @@
         state.site.swayingTrees.forEach((tr, i) => {
             tr.rotation.z = Math.sin(t * (state.weather === 'wind' ? 3.8 : 1.5) + i) * swayAmp;
         });
+
+        // Fumaça suave das chaminés das casas habitadas (P2.2 + P3.0)
+        if (state.village && Array.isArray(state.village.chimneys) && state.village.chimneys.length > 0 && MO.spawnBurst) {
+            state.village.smokeTimer = (state.village.smokeTimer || 0) + dt;
+            if (state.village.smokeTimer >= 0.45) {
+                state.village.smokeTimer = 0;
+                state.village.chimneys.forEach(ch => {
+                    MO.spawnBurst(ch.x, ch.y, ch.z, 0xe2e8f0, 1, 0.014);
+                });
+            }
+        }
 
         // Vagalumes à noite (sem chuva)
         const showFireflies = state.isNight && !raining;

@@ -14,6 +14,10 @@
         return MO.workerFactory.hireCrew(helperCount, includeSupervisor);
     };
 
+    MO.hireSpecialist = function(profId, options) {
+        return MO.workerFactory.hireSpecialist(profId, options);
+    };
+
     MO.hireMiniWorker = function(options) {
         const opts = (options && typeof options === 'object' && typeof options.preventDefault !== 'function')
             ? options
@@ -46,7 +50,9 @@
             || lots.find(l => (l.allowedModes || []).includes(target) && l.status === 'completed')
             || lots.find(l => (l.allowedModes || []).includes(target));
         if (matchLot && MO.focusCameraOn) {
-            MO.focusCameraOn(matchLot.x, matchLot.z, 17.5);
+            const lx = matchLot.originX !== undefined ? matchLot.originX : (matchLot.x || 0);
+            const lz = matchLot.originZ !== undefined ? matchLot.originZ : (matchLot.z || 0);
+            MO.focusCameraOn(lx, lz, 17.5);
             if (MO.showToast) MO.showToast(`📍 Foco da câmera: ${matchLot.label}`, '🎥');
         } else if (MO.focusCameraOn) {
             MO.focusCameraOn(0, -0.5, 22.0);
@@ -128,7 +134,11 @@
         MO.worldManager.saveToStorage();
         MO.syncPhaseUI();
         if (MO.updateVillageUI) MO.updateVillageUI();
-        if (MO.focusCameraOn && state.screensaver) MO.focusCameraOn(nextLot.x, nextLot.z, 19.5);
+        if (MO.focusCameraOn && state.screensaver) {
+            const nx = nextLot.originX !== undefined ? nextLot.originX : (nextLot.x || 0);
+            const nz = nextLot.originZ !== undefined ? nextLot.originZ : (nextLot.z || 0);
+            MO.focusCameraOn(nx, nz, 19.5);
+        }
 
         const fromLbl = prevLot ? prevLot.label : (archived ? archived.lotId : 'Obra');
         MO.showToast(`🏘️ ${fromLbl} preservada! Equipe iniciando ${nextLot.label}.`, '✨');
@@ -197,6 +207,11 @@
             state.workbench.cutWood = 0;
             state.workbench.busyWorkerId = null;
         }
+        if (state.city) {
+            if (state.city.roadTiles && state.city.roadTiles.clear) state.city.roadTiles.clear();
+            state.city.structures = [];
+            state.city.activeBuildTool = null;
+        }
         MO.resetBucketRef();
 
         [
@@ -204,8 +219,8 @@
             MO.groups.muroStair, MO.groups.looseBricks, MO.groups.floor, MO.groups.mep,
             MO.groups.roof, MO.groups.bridge, MO.groups.building, MO.groups.tower,
             MO.groups.camp, MO.groups.workers, MO.groups.fx, MO.groups.physicsSupplies, MO.groups.weeds,
-            MO.groups.demarcation
-        ].forEach(g => MO.resources.clearGroup(g));
+            MO.groups.demarcation, MO.groups.cityInfra, MO.groups.cityNodes
+        ].forEach(g => { if (g) MO.resources.clearGroup(g); });
         state.draggableSupplies = [];
 
         MO.toggleXRayMode(false);
@@ -285,11 +300,66 @@
         }
     };
 
+    MO.toggleCinemaTour = function(forceVal) {
+        const state = MO.state;
+        state.cinemaTour = (typeof forceVal === 'boolean') ? forceVal : !state.cinemaTour;
+        state.cinemaTimer = 0;
+        const btn = document.getElementById('btn-cinema-tour');
+        if (btn) btn.classList.toggle('active', state.cinemaTour);
+        if (MO.showToast) {
+            MO.showToast(
+                state.cinemaTour
+                    ? '🎥 Tour Contemplativo ativo: câmera passeando suavemente pela vila!'
+                    : '🎥 Tour pausado. Câmera livre ativa.',
+                '🎥'
+            );
+        }
+        return state.cinemaTour;
+    };
+
     MO.updateScreensaverCamera = function(dt, t) {
         const state = MO.state;
-        if (!state.screensaver || MO.camOrbit.isDragging) return;
-        MO.camOrbit.theta += dt * 0.14;
-        MO.camOrbit.phi = 0.84 + Math.sin(t * 0.25) * 0.08;
+        if ((!state.screensaver && !state.cinemaTour) || MO.camOrbit.isDragging) return;
+        MO.camOrbit.theta += dt * (state.cinemaTour ? 0.11 : 0.14);
+        MO.camOrbit.phi = 0.84 + Math.sin(t * 0.22) * 0.08;
+
+        if (state.cinemaTour && MO.regionManager && MO.focusCameraOn) {
+            state.cinemaTimer = (state.cinemaTimer || 0) + dt;
+            if (state.cinemaTimer >= 10.0) {
+                state.cinemaTimer = 0;
+                const lots = MO.regionManager.getLotsForRegion('main-valley').filter(l => l.status !== 'available' || l.status === 'active');
+                const spots = [{ originX: 0, originZ: -0.5, radius: 30.0 }].concat(lots);
+                state.cinemaIdx = ((state.cinemaIdx || 0) + 1) % spots.length;
+                const pick = spots[state.cinemaIdx];
+                MO.focusCameraOn(pick.originX || 0, pick.originZ || 0, pick.radius || 18.0);
+            }
+        }
+    };
+
+    MO.updateCityConstructionAutomation = function(dt, t) {
+        const state = MO.state;
+        if (!state.cityMode || state.screensaver) return;
+        const activeConstr = MO.constructionManager && MO.constructionManager.getActiveConstruction
+            ? MO.constructionManager.getActiveConstruction()
+            : null;
+        if (!activeConstr) {
+            state.cityCompletedTime = 0;
+            return;
+        }
+        const modePlugin = MO.modes[state.mode];
+        const finished = modePlugin && modePlugin.updateAutopilot ? modePlugin.updateAutopilot(dt, t) : false;
+        if (finished) {
+            if (!state.cityCompletedTime) {
+                state.cityCompletedTime = t;
+            } else if (t - state.cityCompletedTime > 1.6) {
+                state.cityCompletedTime = 0;
+                if (MO.worldManager && MO.worldManager.archiveAndAdvanceToNextLot) {
+                    MO.worldManager.archiveAndAdvanceToNextLot(state.mode);
+                }
+                if (MO.cityManager && MO.cityManager.saveCityState) MO.cityManager.saveCityState();
+                if (MO.syncPhaseUI) MO.syncPhaseUI();
+            }
+        }
     };
 
     MO.updateScreensaverAutopilot = function(dt, t) {

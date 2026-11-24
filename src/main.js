@@ -32,11 +32,27 @@
         hireMiniWorker: MO.hireMiniWorker,
         hireSupervisor: MO.hireSupervisor,
         hireHelper: MO.hireHelper,
+        hireSpecialist: MO.hireSpecialist,
         hireCrew: MO.hireCrew,
+        setCityBuildTool: MO.setCityBuildTool,
+        toggleSandboxMode: MO.toggleSandboxMode,
+        toggleCityPalette: MO.toggleCityPalette,
+        toggleCityCategory: MO.toggleCityCategory,
+        clearCitySelection: MO.clearCitySelection,
+        toggleOptionsPanel: MO.toggleOptionsPanel,
+        togglePhonePanel: MO.togglePhonePanel,
+        callTruckFromPhone: MO.callTruckFromPhone,
+        sellSurplusViaPhone: MO.sellSurplusViaPhone,
+        openCitySetupModal: MO.openCitySetupModal,
+        showTitleView: MO.showTitleView,
+        selectSetupGameMode: MO.selectSetupGameMode,
+        continueCityFromMenu: MO.continueCityFromMenu,
+        startCityFromMenu: MO.startCityFromMenu,
         toggleNpcPanel: MO.toggleNpcPanel,
         renderNpcRosterUI: MO.renderNpcRosterUI,
         focusVillageRegion: MO.focusVillageRegion,
         cycleSimSpeed: MO.cycleSimSpeed,
+        toggleCinemaTour: MO.toggleCinemaTour,
         regenerateNewTerrain: MO.regenerateNewTerrain,
         toggleScreensaverMode: MO.toggleScreensaverMode,
         togglePersistentVillage: MO.togglePersistentVillage,
@@ -205,6 +221,7 @@
         MO.updateAtmosphere(fixedDt, simTime);
         MO.updateSkyAndWeather(fixedDt, simTime);
         MO.updateRandomEvents(fixedDt);
+        if (MO.updateMicroEvents) MO.updateMicroEvents(fixedDt, simTime);
         MO.updateCollapseDebris(fixedDt);
         MO.updateSiteLogistics(fixedDt);
         if (MO.updateCamp) MO.updateCamp(fixedDt, simTime);
@@ -215,6 +232,9 @@
         if (activeMode && activeMode.updateSimulation) {
             activeMode.updateSimulation(fixedDt, simTime);
         }
+        if (MO.updateCityConstructionAutomation) {
+            MO.updateCityConstructionAutomation(fixedDt, simTime);
+        }
         MO.updateScreensaverAutopilot(fixedDt, simTime);
     }
 
@@ -222,8 +242,14 @@
         applyWorkerVisualInterpolation(alpha);
 
         const camDt = Math.min(MO.simClock.maxFrameDt, Math.max(0, frameDt));
+        if (MO.updateCameraPan) {
+            MO.updateCameraPan(camDt);
+        }
         if (MO.updateScreensaverCamera) {
             MO.updateScreensaverCamera(camDt, visualTime);
+        }
+        if (MO.state.infiniteWorld && MO.chunkManager && MO.camOrbit && MO.camOrbit.target) {
+            MO.chunkManager.updateAround(MO.camOrbit.target.x, MO.camOrbit.target.z);
         }
 
         if (MO.waterTex) {
@@ -235,6 +261,9 @@
         }
 
         const camOrbit = MO.camOrbit;
+        if (MO.state.cityMode && MO.state.city && !MO.state.city.setupConfirmed && !camOrbit.isDragging) {
+            camOrbit.theta += camDt * 0.065;
+        }
         if (camOrbit.targetGoal && !camOrbit.isDragging) {
             const lerpF = Math.min(1, camDt * 4.5);
             camOrbit.target.x += (camOrbit.targetGoal.x - camOrbit.target.x) * lerpF;
@@ -295,22 +324,45 @@
         MO.createDioramaBase();
         MO.createProceduralTerrainMesh();
         MO.populateNatureAndSplats();
-        if (MO.worldManager) {
-            MO.worldManager.initDefaultWorld();
-        }
-        MO.populateBuildableLotWeeds();
-        MO.placeMixerStationOnTerrain();
-        if (MO.initToolbox) MO.initToolbox();
-        if (MO.initWorkbench) MO.initWorkbench();
-        MO.restockSupplies();
-        MO.rebuildSiteProps();
-        if (MO.rebuildCamp) MO.rebuildCamp();
+        if (MO.state.cityMode && MO.state.city && MO.state.city.playerDriven) {
+            MO.STATION_TOOLBOX = { x: -2.2, z: 2.0 };
+            if (MO.chunkManager) MO.chunkManager.init();
+            if (MO.regionManager) MO.regionManager.reset();
+            if (MO.constructionManager) MO.constructionManager.clearAll();
+            if (MO.initToolbox) MO.initToolbox();
+            MO.rebuildSiteProps(true);
+            if (MO.rebuildCamp) MO.rebuildCamp(true);
+            if (MO.setMixerBuilt) MO.setMixerBuilt(false);
+            if (MO.setWorkbenchBuilt) MO.setWorkbenchBuilt(false);
+            if (MO.setUnloadingBuilt) MO.setUnloadingBuilt(false);
+            if (MO.setStockYardsBuilt) MO.setStockYardsBuilt(false);
+            MO.state.phase = 0;
+            if (MO.workerFactory) {
+                MO.workerFactory.hireSupervisor({
+                    silent: true,
+                    profile: { name: MO.state.supervisorName || 'Supervisor Beto', role: 'supervisor', specialty: 'supervisor', helmet: 0xf8fafc, vest: 0xf59e0b, speed: 3.35 }
+                });
+                MO.workerFactory.hireWorker({ kind: 'helper', silent: true, maxHelpers: 50 });
+                MO.workerFactory.syncNpcUI();
+            }
+        } else {
+            if (MO.worldManager) {
+                MO.worldManager.initDefaultWorld();
+            }
+            MO.populateBuildableLotWeeds();
+            MO.placeMixerStationOnTerrain();
+            if (MO.initToolbox) MO.initToolbox();
+            if (MO.initWorkbench) MO.initWorkbench();
+            MO.restockSupplies();
+            MO.rebuildSiteProps();
+            if (MO.rebuildCamp) MO.rebuildCamp();
 
-        if (MO.modes.house && MO.modes.house.onInit) {
-            MO.modes.house.onInit();
+            if (MO.modes.house && MO.modes.house.onInit) {
+                MO.modes.house.onInit();
+            }
         }
         let restored = false;
-        if (MO.worldManager) {
+        if (!MO.state.cityMode && MO.worldManager) {
             restored = MO.worldManager.restoreSavedWorld ? MO.worldManager.restoreSavedWorld() : false;
             if (!restored && MO.worldManager.meta.persistentGrowth) {
                 MO.populateBuildableLotWeeds();
@@ -318,13 +370,18 @@
             }
         }
         if (MO.updateVillageUI) MO.updateVillageUI();
+        if (MO.cityManager && MO.cityManager.syncEconomyUI) MO.cityManager.syncEconomyUI();
+        if (MO.refreshTitleMenuUI) MO.refreshTitleMenuUI();
+        const seedInput = document.getElementById('setup-seed');
+        if (seedInput) seedInput.value = String(MO.state.seed);
         if (MO.workerFactory && MO.workerFactory.syncNpcUI) MO.workerFactory.syncNpcUI();
         if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
         MO.syncPhaseUI();
         MO.selectTool('clear-weeds');
         if (restored) {
             const doneCount = MO.constructionManager ? MO.constructionManager.getCompletedConstructions().length : 0;
-            MO.showToast(`🏘️ Vila restaurada com ${doneCount} casa(s) preservada(s)!`, '🏡');
+            const npcCount = MO.state.workers ? MO.state.workers.length : 0;
+            MO.showToast(`🏘️ Vila restaurada: ${doneCount} obra(s) e ${npcCount} NPC(s)!`, '🏡');
         }
         lastTime = performance.now();
         animate();

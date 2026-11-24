@@ -147,7 +147,20 @@ function bootWorldApp() {
     for (const rel of scriptMatches) {
         vm.runInContext(fs.readFileSync(path.join(rootDir, rel), 'utf8'), ctx, { filename: rel });
     }
-    return windowObj.MO;
+    const MO = windowObj.MO;
+    MO.state.cityMode = false;
+    MO.state.city.playerDriven = false;
+    MO.state.workers = [];
+    MO.resources.clearGroup(MO.groups.workers);
+    MO.worldManager.initDefaultWorld();
+    MO.populateBuildableLotWeeds();
+    MO.placeMixerStationOnTerrain();
+    MO.initWorkbench();
+    MO.restockSupplies();
+    MO.rebuildSiteProps(false);
+    MO.rebuildCamp(false);
+    MO.modes.house.onInit();
+    return MO;
 }
 
 test('RegionManager e WorldManager inicializam vila unificada com 5 lotes por seed e coordenadas', () => {
@@ -397,4 +410,162 @@ test('Ponte desbloqueia o Banco Leste na navegação A* e na progressão complet
     ['house', 'bridge', 'building', 'tower'].forEach(modeId => {
         assert.ok(archivedModes.includes(modeId), `Vila concluída deve preservar modo ${modeId}`);
     });
+});
+
+test('P1.3: restoreSavedWorld reconstrói Casa, Ponte, Prédio, Torre, estradas, acampamento e NPCs', () => {
+    const MO = bootWorldApp();
+
+    // Prepara infraestrutura, estradas, acampamento e NPCs
+    MO.state.villageInfra.demarcated = true;
+    MO.state.villageInfra.roadBuilt = true;
+    MO.state.villageInfra.unloadingBuilt = true;
+    MO.state.villageInfra.mixerBuilt = true;
+    MO.state.villageInfra.workbenchBuilt = true;
+    MO.state.villageInfra.yardsBuilt = true;
+    MO.paintRoadWeight(MO.STATION_UNLOAD.x, MO.STATION_UNLOAD.z, 1.35, 0.95);
+    MO.updateTerrainGeometry();
+    if (MO.state.camp && MO.state.camp.tents && MO.state.camp.tents[0]) {
+        MO.state.camp.tents[0].built = true;
+    }
+
+    const sup = MO.hireSupervisor({ silent: true });
+    const h1 = MO.hireHelper({ silent: true });
+    sup.rig.group.position.set(-5.5, 0.3, -1.2);
+    h1.energy = 64.5;
+
+    // Constrói e arquiva os 5 lotes da vila (incluindo house, bridge, building e tower)
+    for (let step = 0; step < 5; step++) {
+        if (MO.state.mode === 'house' && MO.loadPresetHouse) {
+            MO.loadPresetHouse('compact');
+            MO.buildFoundation3D();
+            MO.state.columns.forEach(c => { c.dug = true; c.hasRebar = true; MO.attachWoodFormworkToColumn(c); MO.concreteColumn(c); });
+            MO.buildInteractiveWalls3D();
+            MO.buildFloorGrid3D();
+            MO.state.walls.forEach(w => { w.slots.forEach(sl => { sl.placed = true; sl.mesh.visible = true; }); w.isPlastered = true; });
+            MO.state.floorTiles.forEach(ft => { ft.concreted = true; });
+            MO.buildRealGableRoofStage();
+            MO.buildRealGableRoofStage();
+        }
+        MO.advanceToNextVillageLot();
+    }
+
+    assert.equal(MO.worldManager.saveToStorage('p13_full_world'), true);
+
+    // Simula reload do index.html em instância limpa e restaura tudo do storage
+    MO.worldManager.clearSavedWorld();
+    const ok = MO.worldManager.restoreSavedWorld('p13_full_world');
+    assert.equal(ok, true);
+
+    const completed = MO.constructionManager.getCompletedConstructions();
+    assert.equal(completed.length, 5);
+    assert.equal(MO.groups.archivedConstructions.children.length, 5);
+    completed.forEach(rec => {
+        assert.ok(rec.group, `Construção ${rec.mode} deve ter grupo 3D reconstruído`);
+        assert.ok(rec.group.children.length > 0, `Construção ${rec.mode} deve restaurar malhas 3D após reload`);
+    });
+
+    assert.equal(MO.state.villageInfra.bridgeUnlocked, true);
+    assert.equal(MO.state.villageInfra.workbenchBuilt, true);
+    assert.ok(MO.sampleRoadWeight(MO.STATION_UNLOAD.x, MO.STATION_UNLOAD.z) > 0.2);
+    assert.equal(MO.state.camp.tents[0].built, true);
+    assert.equal(MO.state.workers.length, 2);
+    assert.equal(MO.state.workers[0].role, 'supervisor');
+    assert.ok(Math.abs(MO.state.workers[0].rig.group.position.x - (-5.5)) < 0.05);
+    assert.ok(Math.abs(MO.state.workers[1].energy - 64.5) < 0.2);
+});
+
+test('P1.4: focusVillageRegion usa originX/originZ válidos e Navigation Cache reusa/invalida trajetórias', () => {
+    const MO = bootWorldApp();
+
+    MO.focusVillageRegion('bridge');
+    assert.ok(Number.isFinite(MO.camOrbit.targetGoal.x));
+    assert.ok(Number.isFinite(MO.camOrbit.targetGoal.z));
+
+    MO.focusVillageRegion('tower');
+    const towerLot = MO.regionManager.getLot('lot-tower');
+    assert.ok(Math.abs(MO.camOrbit.targetGoal.x - towerLot.originX) < 1e-6);
+    assert.ok(Math.abs(MO.camOrbit.targetGoal.z - towerLot.originZ) < 1e-6);
+
+    MO.state.villageInfra.bridgeUnlocked = false;
+    MO.loadPresetHouse('compact');
+    MO.buildInteractiveWalls3D();
+    MO.state.walls.forEach(w => { w.slots.forEach(sl => { sl.placed = true; }); });
+
+    const p1 = MO.computeWorkerPath(null, -8.0, -4.0, -2.0, -1.0);
+    const p2 = MO.computeWorkerPath(null, -8.0, -4.0, -2.0, -1.0);
+    assert.ok(p1.length >= 1);
+    assert.ok(p2.length >= 1);
+    const statsAfterHit = MO.getNavigationStats();
+    assert.ok(statsAfterHit.hits >= 1, 'Segunda consulta idêntica deve usar cache de caminho A*');
+
+    const prevVersion = statsAfterHit.version;
+    MO.invalidateNavigationCache();
+    const statsAfterInv = MO.getNavigationStats();
+    assert.equal(statsAfterInv.version, prevVersion + 1);
+    assert.equal(statsAfterInv.cachedPaths, 0);
+});
+
+test('P2.2/P3.0: casas concluídas ganham chaminés, luzes noturnas e moradores com rotinas pós-obra', () => {
+    const MO = bootWorldApp();
+
+    MO.loadPresetHouse('compact');
+    MO.buildFoundation3D();
+    MO.state.columns.forEach(c => { c.dug = true; c.hasRebar = true; MO.attachWoodFormworkToColumn(c); MO.concreteColumn(c); });
+    MO.buildInteractiveWalls3D();
+    MO.buildFloorGrid3D();
+    MO.state.walls.forEach(w => { w.slots.forEach(sl => { sl.placed = true; sl.mesh.visible = true; }); w.isPlastered = true; });
+    MO.state.floorTiles.forEach(ft => { ft.concreted = true; });
+    MO.buildRealGableRoofStage();
+    MO.buildRealGableRoofStage();
+
+    MO.advanceToNextVillageLot();
+
+    assert.ok(MO.state.village.chimneys.length >= 1, 'Casa concluída deve registrar chaminé ativa');
+    const nightLights = MO.worldManager.getNightLights();
+    assert.ok(nightLights.length >= 1, 'Casa concluída deve registrar luminária de varanda');
+
+    MO.state.isNight = true;
+    MO.state.timeOfDay = 0.92;
+    MO.updateAtmosphere(0.1, 5.0);
+    assert.ok(nightLights.some(l => l.light && l.light.intensity > 1.5), 'Luminárias arquivadas devem acender à noite');
+
+    MO.state.camp.floodlights.forEach(fl => { fl.built = true; });
+    if (MO.state.camp.messHall) MO.state.camp.messHall.built = true;
+    MO.state.camp.tents.forEach(tn => { tn.built = true; });
+
+    const resident = MO.hireHelper({
+        silent: true,
+        profile: { name: 'Moradora Clara', role: 'resident', specialty: 'resident' }
+    });
+    resident.socialCooldown = 20;
+    const assigned = MO.workerNeeds.assignCampOrLifeTask(
+        resident, MO.workerTasks.setDestination, MO.workerFactory.setWorkerTool, 3.0, true
+    );
+    assert.equal(assigned, true);
+    assert.equal(resident.task.type, 'visit-home');
+});
+
+test('P3.1/P4.0: Tour Contemplativo alterna foco e regiões conectadas descobrem Banco Leste sob demanda', () => {
+    const MO = bootWorldApp();
+
+    // P3.1: Toggle Tour Contemplativo e atualização visual noturna de janelas
+    assert.equal(MO.toggleCinemaTour(true), true);
+    MO.updateScreensaverCamera(10.2, 10.2);
+    assert.ok(Number.isFinite(MO.camOrbit.theta));
+    assert.equal(MO.toggleCinemaTour(false), false);
+
+    // P4.0: Grafo multi-região conectado pela ponte
+    const connected = MO.regionManager.getConnectedRegions('main-valley');
+    assert.equal(connected.length, 1);
+    assert.equal(connected[0].region.id, 'east-highlands');
+    assert.equal(connected[0].edge.portalLotId, 'lot-bridge');
+    assert.equal(connected[0].region.discovered, false);
+
+    // Arquivar ponte descobre e carrega a região conectada
+    MO.regionManager.setActiveLot('lot-bridge');
+    MO.state.mode = 'bridge';
+    if (MO.modes.bridge && MO.modes.bridge.onInit) MO.modes.bridge.onInit();
+    MO.worldManager.archiveAndAdvanceToNextLot();
+    assert.equal(MO.regionManager.getRegion('east-highlands').discovered, true);
+    assert.equal(MO.regionManager.getRegion('east-highlands').loaded, true);
 });

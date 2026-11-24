@@ -116,27 +116,34 @@
         return item;
     }
 
-    MO.restockSupplies = function(quiet) {
+    MO.restockSupplies = function(quiet, anchorPos = null) {
         const state = MO.state;
         state.draggableSupplies = state.draggableSupplies.filter(s => {
             if (s.type === 'bucket') return true;
             MO.resources.removeAndDispose(MO.groups.physicsSupplies, s.mesh);
             return false;
         });
-        const ix = MO.STATION_MIXER.x, iz = MO.STATION_MIXER.z;
-        const baseY = MO.getTerrainHeight(ix - 1.15, iz);
+        const infra = state.villageInfra;
+        const playerDriven = Boolean(state.cityMode && state.city && state.city.playerDriven);
+        const fallbackAnchor = (playerDriven && MO.STATION_STOCKYARD && (!infra || !infra.mixerPlaced))
+            ? MO.STATION_STOCKYARD
+            : (playerDriven && (!infra || !infra.mixerPlaced) && MO.STATION_UNLOAD ? MO.STATION_UNLOAD : MO.STATION_MIXER);
+        const target = anchorPos || fallbackAnchor || MO.STATION_MIXER;
+        const ix = target.x, iz = target.z;
+        const baseY = MO.getTerrainHeight(ix, iz);
         for (let i = 0; i < 6; i++) {
-            createPhysicalSupply('sand', ix - 1.15 - (i >= 3 ? 0.45 : 0), baseY + 0.7 + (i % 3) * 0.32, iz - 0.45);
+            createPhysicalSupply('sand', ix - 0.85 - (i >= 3 ? 0.42 : 0), baseY + 0.55 + (i % 3) * 0.28, iz - 0.38);
         }
-        createPhysicalSupply('cement', ix - 1.15, baseY + 0.8, iz + 0.18);
-        createPhysicalSupply('cement', ix - 1.15, baseY + 1.12, iz + 0.18);
-        createPhysicalSupply('water', ix - 1.15, baseY + 0.85, iz + 0.72);
-        createPhysicalSupply('water', ix - 1.55, baseY + 0.85, iz + 0.72);
-        if (!MO.mixer.bucketObj) {
-            createPhysicalSupply('bucket', ix + 0.95, MO.getTerrainHeight(ix + 0.95, iz + 0.6) + 0.6, iz + 0.6);
+        createPhysicalSupply('cement', ix - 0.85, baseY + 0.65, iz + 0.22);
+        createPhysicalSupply('cement', ix - 0.85, baseY + 0.95, iz + 0.22);
+        createPhysicalSupply('water', ix - 0.78, baseY + 0.70, iz + 0.72);
+        createPhysicalSupply('water', ix - 1.18, baseY + 0.70, iz + 0.72);
+        if (!MO.mixer.bucketObj && (!playerDriven || (infra && infra.mixerPlaced))) {
+            const mx = MO.STATION_MIXER.x, mz = MO.STATION_MIXER.z;
+            createPhysicalSupply('bucket', mx + 0.95, MO.getTerrainHeight(mx + 0.95, mz + 0.6) + 0.55, mz + 0.6);
         }
         if (!quiet) {
-            MO.showToast('Insumos entregues na masseira! Arraste ou clique neles para jogar na caixa.', '🚚');
+            MO.showToast('Insumos entregues! Areia, cimento e água prontos para a equipe.', '🚚');
         }
     };
 

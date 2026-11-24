@@ -31,8 +31,11 @@
 
     MO.state = {
         mode: 'house',
-        unifiedVillage: true,      // Mapa único de vila guiado por seed
+        infiniteWorld: true,       // Cenário procedural infinito por chunks 3D
+        cityMode: true,            // Gestão de cidade a partir do zero
+        unifiedVillage: true,      // Compatibilidade com pipeline multi-obras
         villageCompleted: false,
+        supervisorName: 'Supervisor Beto',
         variant: 'L-shape',        // Variante arquitetônica sorteada ou selecionada
         biome: 'forest',           // 'forest' | 'coast' | 'cerrado' | 'mountain'
         weather: 'clear',          // 'clear' | 'rain' | 'wind'
@@ -42,6 +45,9 @@
         tool: 'clear-weeds',
         xray: false,
         screensaver: false,
+        cinemaTour: false,
+        cinemaTimer: 0,
+        cinemaIdx: 0,
         playlist: true,
         zenMode: false,
         muted: false,              // Mudo para efeitos da obra (martelo, pá, etc.)
@@ -67,7 +73,14 @@
         events: {
             timer: 10,
             active: null,
-            bannerTimer: 0
+            bannerTimer: 0,
+            microTimer: 8,
+            microLog: []
+        },
+        village: {
+            chimneys: [],
+            plazas: [],
+            smokeTimer: 0
         },
 
         // Fase 0: Mato, Arbustos, Pedras Soltas & Pontos de Terraplanagem do Lote
@@ -211,6 +224,28 @@
             cutBreakdown: { formwork: 0, props: 0, scaffolds: 0, roof: 0 },
             busyWorkerId: null,
             sawProgress: 0
+        },
+
+        // Economia & Gestão da Cidade (P4/City Builder)
+        economy: {
+            sandboxMode: false,    // false = exige recursos coletados; true = livre sem custos
+            wood: 24,
+            stone: 20,
+            iron: 8,
+            food: 24,
+            coins: 60
+        },
+
+        // Estado da Cidade Infinita (estradas, ruas, lotes livres, construções produtivas)
+        city: {
+            playerDriven: true,
+            setupConfirmed: false,
+            activeCategory: null,  // 'roads' | 'support' | 'city' | 'economy' | null
+            activeBuildTool: null, // 'dirt-road' | 'paved-street' | 'unloading' | 'mixer' | 'workbench' | 'mess-hall' | 'tent' | 'floodlight' | 'stockyard' | 'house-auto' | 'house-custom' | 'bridge' | 'building' | 'tower' | 'farm' | 'lumberyard' | 'mine' | 'market'
+            roadTiles: new Map(),  // key "gx,gz" -> { gx, gz, kind: 'dirt'|'paved', built: boolean }
+            structures: [],        // Estruturas produtivas & de apoio colocadas livremente
+            customHouseCells: new Set(),
+            levelStamps: []
         },
 
         // Trabalhadores & FX

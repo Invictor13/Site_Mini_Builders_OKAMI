@@ -42,6 +42,9 @@
                 centerX: spec.centerX || 0,
                 centerZ: spec.centerZ || 0,
                 radius: spec.radius !== undefined ? spec.radius : MO.DIORAMA_R,
+                discovered: spec.discovered !== undefined ? Boolean(spec.discovered) : true,
+                loaded: spec.loaded !== undefined ? Boolean(spec.loaded) : true,
+                neighbors: Array.isArray(spec.neighbors) ? spec.neighbors.map(n => ({ ...n })) : [],
                 lotIds: []
             };
             regions.set(region.id, region);
@@ -49,6 +52,35 @@
                 activeRegionId = region.id;
             }
             return region;
+        }
+
+        function connectRegions(regionAId, regionBId, spec = {}) {
+            const rA = regions.get(regionAId);
+            const rB = regions.get(regionBId);
+            if (!rA || !rB || regionAId === regionBId) return false;
+            if (!rA.neighbors.some(n => n.regionId === regionBId)) {
+                rA.neighbors.push({ regionId: regionBId, portalLotId: spec.portalLotId || null, label: spec.label || rB.name });
+            }
+            if (!rB.neighbors.some(n => n.regionId === regionAId)) {
+                rB.neighbors.push({ regionId: regionAId, portalLotId: spec.portalLotId || null, label: spec.label || rA.name });
+            }
+            return true;
+        }
+
+        function getConnectedRegions(regionId = activeRegionId) {
+            const r = regions.get(regionId);
+            if (!r) return [];
+            return r.neighbors
+                .map(edge => ({ edge, region: regions.get(edge.regionId) || null }))
+                .filter(entry => entry.region !== null);
+        }
+
+        function discoverRegion(regionId, loadNow = true) {
+            const r = regions.get(regionId);
+            if (!r) return null;
+            r.discovered = true;
+            r.loaded = Boolean(loadNow);
+            return r;
         }
 
         function registerLot(spec = {}) {
@@ -123,7 +155,10 @@
                     seed: r.seed,
                     centerX: r.centerX,
                     centerZ: r.centerZ,
-                    radius: r.radius
+                    radius: r.radius,
+                    discovered: r.discovered,
+                    loaded: r.loaded,
+                    neighbors: r.neighbors.map(n => ({ ...n }))
                 })),
                 lots: Array.from(lots.values()).map(l => ({ ...l, allowedModes: l.allowedModes.slice() }))
             };
@@ -149,6 +184,9 @@
         return {
             reset,
             registerRegion,
+            connectRegions,
+            getConnectedRegions,
+            discoverRegion,
             registerLot,
             getRegion,
             getAllRegions,

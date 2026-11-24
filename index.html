@@ -19,109 +19,258 @@
         👁️ Sair do Modo Zen (H)
     </button>
 
-    <!-- HEADER RESPONSIVO (Empilha limpo no celular vertical, cantos opostos no monitor horizontal) -->
-    <header class="hud-hideable fixed top-0 inset-x-0 z-20 safe-top px-2 sm:px-4 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-1.5 pointer-events-none">
-
-        <!-- Seletor de Foco da Vila + Fase Atual -->
-        <div class="flex flex-col items-start gap-1.5 max-w-full">
-            <div class="pointer-events-auto dock-surface dock-scroll rounded-xl p-1 flex items-center gap-1 max-w-[96vw]">
-                <button data-region-focus="overview" data-keep-active="true" onclick="focusVillageRegion('overview')" class="tool-btn active px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Visão panorâmica da Vila">🗺️ Vila</button>
-                <button data-region-focus="house" data-keep-active="true" onclick="focusVillageRegion('house')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera nas Casas">🏠 Casas</button>
-                <button data-region-focus="bridge" data-keep-active="true" onclick="focusVillageRegion('bridge')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera na Ponte sobre o Rio">🌉 Ponte</button>
-                <button data-region-focus="building" data-keep-active="true" onclick="focusVillageRegion('building')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera no Prédio">🏢 Prédio</button>
-                <button data-region-focus="tower" data-keep-active="true" onclick="focusVillageRegion('tower')" class="tool-btn px-2.5 py-1.5 sm:py-1 rounded-lg border border-transparent text-[11px] font-semibold" title="Focar câmera na Torre">🗼 Torre</button>
-            </div>
-            <div class="dock-surface rounded-xl px-3 py-1.5 flex items-center gap-2 max-w-[96vw]">
-                <span id="phase-dot" class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
-                <span id="phase-indicator" class="text-[10px] font-semibold tracking-wider uppercase text-slate-200 truncate">
-                    CASA · FASE 0 · CAPINA & TERRAPLANAGEM
-                </span>
-            </div>
-        </div>
-
-        <!-- Protetor de Tela, Clima, Bioma, Risco, Zen, Dia/Noite, Áudio & Ferramentas -->
-        <div class="pointer-events-auto dock-surface dock-scroll rounded-xl p-1 flex items-center gap-1 max-w-[96vw] self-start lg:self-auto">
-            <button id="btn-screensaver" onclick="toggleScreensaverMode()" class="tool-btn flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-emerald-300" title="Modo Protetor de Tela Relaxante (Autopilot 100%)">
-                <span>🌙</span><span id="screensaver-btn-label">Modo Relax</span>
-            </button>
-            <button id="btn-village-mode" data-keep-active="true" onclick="togglePersistentVillage()" class="tool-btn active flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-amber-200" title="Vila Contínua: preserva casas concluídas e constrói nos próximos lotes">
-                <span>🏘️</span><span id="village-btn-label">Vila: 0/3</span>
-            </button>
-            <button id="btn-next-lot" onclick="advanceToNextVillageLot()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-200" title="Preservar obra atual e avançar para o próximo lote da vila">
-                <span>⏩</span><span class="hidden sm:inline">Próx. Lote</span>
-            </button>
-            <button id="btn-playlist" onclick="togglePlaylistMode()" class="tool-btn active px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Playlist Automática entre Obras no Modo Relax">
-                <span>🔁</span>
-            </button>
-            <button id="btn-risk-profile" data-keep-active="true" onclick="toggleRiskProfile()" class="tool-btn active px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-amber-200" title="Perfil: Realista (imprevistos e risco de falha) vs Calmo">
-                ⚡ Realista
-            </button>
-            <button id="btn-camp-shift" data-keep-active="true" onclick="toggleCampNightMode()" class="tool-btn active px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-200" title="Turno Noturno: Revezamento com Refletores vs Todos Dormem à Noite">
-                🔄 Turno
-            </button>
-            <button id="btn-zen" onclick="toggleZenMode(true)" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Modo Zen / Ocultar HUD (Tecla H)">
-                <span>📺</span>
-            </button>
-            <button id="btn-daynight" onclick="toggleDayNightStep()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Dia / Noite">
-                <span>☀️</span>
-            </button>
-            <button id="btn-weather" onclick="cycleWeatherManual()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Clima (Limpo / Chuva / Vento)">
-                <span>🌤️</span>
-            </button>
-            <button id="btn-biome" onclick="cycleBiomeManual()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Trocar Bioma (Floresta / Litoral / Cerrado / Montanha)">
-                <span>🌍</span>
-            </button>
-            <button id="btn-ambient" data-keep-active="true" onclick="toggleAmbientMute()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Ativar/Desativar Som Ambiente ASMR (Vento, Rio, Noite)">
-                <span>🌿</span>
-            </button>
-            <button id="btn-mute" onclick="toggleAudioMute()" class="tool-btn px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Silenciar / Ativar Efeitos da Obra">
-                <span>🔊</span>
-            </button>
+    <!-- HEADER MINIMALISTA: APENAS RECURSOS NO CANTO SUPERIOR ESQUERDO -->
+    <header class="hud-hideable fixed top-0 left-0 z-20 safe-top px-3 sm:px-4 pointer-events-none">
+        <div class="pointer-events-auto dock-surface dock-scroll rounded-xl px-2.5 py-1 flex items-center gap-1.5 max-w-[92vw]">
+            <span class="text-[11px] px-1 text-amber-200" title="Madeira">🪵 <b id="eco-wood">24</b></span>
+            <span class="text-[11px] px-1 text-slate-200" title="Pedra">🪨 <b id="eco-stone">20</b></span>
+            <span class="text-[11px] px-1 text-sky-300" title="Ferro">⛓️ <b id="eco-iron">8</b></span>
+            <span class="text-[11px] px-1 text-lime-300" title="Alimentos">🌾 <b id="eco-food">24</b></span>
+            <span class="text-[11px] px-1 text-yellow-300" title="Moedas">🪙 <b id="eco-coins">60</b></span>
             <div class="w-px h-4 bg-white/10 shrink-0"></div>
-            <button id="btn-sim-speed" data-keep-active="true" onclick="cycleSimSpeed()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-amber-300" title="Velocidade da Simulação (1x / 2x / 4x)">
-                <span>⚡</span><span id="speed-btn-label">1x</span>
+            <button id="btn-sandbox-mode" data-keep-active="true" onclick="toggleSandboxMode()" class="tool-btn px-2 py-0.5 rounded-lg border border-transparent text-[10px] font-semibold text-cyan-200" title="Alternar Economia Real vs Modo Sandbox Livre">
+                <span id="sandbox-btn-label">Gestão</span>
             </button>
-            <button id="btn-npc-menu" data-keep-active="true" onclick="toggleNpcPanel()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Categoria NPC: Contratar Supervisor (máx. 1) e Ajudantes (máx. 10)">
-                <span>👷</span><span id="npc-btn-label">NPCs (0/11)</span>
-            </button>
-            <button id="btn-xray" onclick="toggleXRayMode()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Alternar Modo Raio-X (Ver Instalações)">
-                <span>👁️</span><span>Raio-X</span>
-            </button>
-            <button id="tool-erase" onclick="selectTool('erase')" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium" title="Apagar / Demolir">
-                <span>🗑️</span>
-            </button>
-            <button id="btn-new-terrain" onclick="regenerateNewTerrain()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-sky-300" title="Gerar Nova Semente de Vila">
-                <span>🎲</span>
-            </button>
-            <button id="btn-diagnostics" onclick="toggleDiagnostics()" class="tool-btn flex items-center gap-1 px-2 py-1.5 rounded-lg border border-transparent text-[11px] font-medium text-emerald-300" title="Diagnóstico FPS, Memória e Draw Calls (Tecla P)">
-                <span>📊</span>
-            </button>
+            <div class="hidden md:flex items-center gap-1.5 pl-1 border-l border-white/10 max-w-[240px]">
+                <span id="phase-dot" class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                <span id="phase-indicator" class="text-[10px] font-medium text-slate-300 truncate">CIDADE LIVRE</span>
+            </div>
+            <span id="city-size-badge" class="hidden px-2 py-0.5 rounded-md bg-sky-500/25 border border-sky-400/50 text-[10px] font-semibold text-sky-200"></span>
         </div>
     </header>
 
-    <!-- Painel Dropdown da Categoria NPC (Supervisor + até 10 Ajudantes) -->
-    <aside id="npc-panel" class="hidden hud-hideable fixed top-24 right-3 z-30 dock-surface rounded-2xl p-3 w-[310px] max-w-[92vw] space-y-2.5 shadow-2xl border border-white/10">
+    <!-- ÍCONE ISOLADO NO CANTO INFERIOR ESQUERDO: SOCIAL (LISTA DE TODOS OS NPCS) -->
+    <button id="btn-npc-menu" data-keep-active="true" onclick="toggleNpcPanel()" class="hud-hideable fixed safe-bottom left-3 sm:left-4 z-30 dock-surface w-12 h-12 rounded-2xl flex flex-col items-center justify-center shadow-2xl border border-white/15 hover:scale-105 transition" title="Social · Ver todos os NPCs da cidade">
+        <span class="text-lg leading-none">👥</span>
+        <span id="npc-btn-label" class="text-[10px] font-bold text-amber-300 leading-none mt-0.5">2</span>
+    </button>
+
+    <!-- Painel Social (Canto Inferior Esquerdo): Lista todos os NPCs do mapa -->
+    <aside id="npc-panel" class="hidden hud-hideable fixed bottom-20 left-3 sm:left-4 z-30 dock-surface rounded-2xl p-3 w-[320px] max-w-[92vw] space-y-2 shadow-2xl border border-white/15">
         <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
-            <span class="text-xs font-semibold text-white">👷 Categoria NPC · Vila</span>
+            <span class="text-xs font-semibold text-white">👥 Social · Moradores & Equipe</span>
             <button onclick="toggleNpcPanel(false)" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
         </div>
-        <div class="grid grid-cols-3 gap-1.5">
-            <button id="btn-hire-supervisor" onclick="hireSupervisor(); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1.5 rounded-lg bg-slate-700/80 hover:bg-slate-600 text-[11px] font-semibold text-amber-200 transition">
-                👷‍♂️ <span id="sup-count-label">Sup (0/1)</span>
-            </button>
-            <button id="btn-hire-helper" onclick="hireHelper(); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1.5 rounded-lg bg-sky-600/80 hover:bg-sky-500 text-[11px] font-semibold text-white transition">
-                👷 <span id="help-count-label">+1 Ajud (0/10)</span>
-            </button>
-            <button onclick="hireCrew(4, true); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-[11px] font-semibold text-white transition">
-                🚀 +Equipe
-            </button>
+        <div class="text-[10px] text-amber-200/80 bg-black/25 rounded-lg px-2 py-1 flex items-center justify-between">
+            <span>Status</span>
+            <span id="npc-workbench-status" class="truncate ml-2">Cidade ativa</span>
         </div>
-        <div class="text-[11px] text-amber-200/90 bg-black/25 rounded-lg px-2 py-1.5 flex items-center justify-between">
-            <span>🪵 Bancada</span>
-            <span id="npc-workbench-status" class="truncate ml-2">Aguardando supervisor</span>
-        </div>
-        <div id="npc-roster" class="max-h-44 overflow-y-auto space-y-1 pr-0.5"></div>
+        <div id="npc-roster" class="max-h-60 overflow-y-auto space-y-1.5 pr-0.5"></div>
     </aside>
+
+    <!-- ÍCONE ISOLADO NO CANTO INFERIOR DIREITO: CELULAR DO GESTOR -->
+    <button id="btn-phone-menu" data-keep-active="true" onclick="togglePhonePanel()" class="hud-hideable fixed safe-bottom right-3 sm:right-4 z-30 dock-surface w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xl border border-emerald-400/35 hover:scale-105 transition" title="Celular · Chamar Caminhão & Contratar Funcionários">
+        <span class="text-xl leading-none">📱</span>
+        <span id="phone-alert-dot" class="hidden absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+    </button>
+
+    <!-- Celular do Gestor (Canto Inferior Direito): Caminhão, RH & Controles -->
+    <aside id="phone-panel" class="hidden hud-hideable fixed bottom-20 right-3 sm:right-4 z-30 dock-surface rounded-3xl p-3.5 w-[285px] max-w-[92vw] space-y-2.5 shadow-2xl border-2 border-slate-600/60">
+        <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span class="text-xs font-bold text-white">📱 Celular do Gestor</span>
+            <button onclick="togglePhonePanel(false)" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
+        </div>
+        <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                <span>🚚 Comprar / Entregas</span>
+                <span id="phone-truck-status" class="text-[10px] font-normal text-slate-400">Baia + Estrada</span>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                <button onclick="callTruckFromPhone('mixed')" class="col-span-2 px-2.5 py-1.5 rounded-xl bg-sky-600/80 hover:bg-sky-500 text-white font-semibold transition">📦 Carga Geral · 28🪙</button>
+                <button onclick="callTruckFromPhone('bricks')" class="px-2 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-100 font-medium">🧱 Pedra · 12🪙</button>
+                <button onclick="callTruckFromPhone('supplies')" class="px-2 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-100 font-medium">🪨 Areia/Cim · 10🪙</button>
+                <button onclick="callTruckFromPhone('rebars')" class="px-2 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-100 font-medium">⛓️ Ferro · 16🪙</button>
+                <button onclick="callTruckFromPhone('wood')" class="px-2 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-100 font-medium">🪵 Madeira · 10🪙</button>
+                <button onclick="sellSurplusViaPhone()" class="col-span-2 px-2 py-1 rounded-xl bg-emerald-700/75 hover:bg-emerald-600 text-emerald-100 font-semibold transition">💰 Exportar Excedente (8🪵/🪨 → +15🪙)</button>
+            </div>
+        </div>
+        <div class="space-y-1.5 border-t border-white/10 pt-2">
+            <div class="text-[10px] font-semibold uppercase tracking-wider text-amber-300">👷 Contratar Funcionários</div>
+            <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                <button id="btn-hire-helper" onclick="hireHelper(); renderNpcRosterUI && renderNpcRosterUI()" class="col-span-2 px-2.5 py-1.5 rounded-xl bg-emerald-600/80 hover:bg-emerald-500 text-white font-semibold transition">👷 <span id="help-count-label">+1 Operário</span></button>
+                <button onclick="hireSpecialist('builder'); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1 rounded-xl bg-amber-600/75 hover:bg-amber-500 text-white font-medium">🧱 Construtor</button>
+                <button onclick="hireSpecialist('lumberjack'); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1 rounded-xl bg-rose-700/75 hover:bg-rose-600 text-white font-medium">🪓 Lenhador</button>
+                <button onclick="hireSpecialist('miner'); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1 rounded-xl bg-slate-600 hover:bg-slate-500 text-white font-medium">⛏️ Mineiro</button>
+                <button onclick="hireSpecialist('farmer'); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1 rounded-xl bg-lime-700/80 hover:bg-lime-600 text-white font-medium">🌾 Fazendeiro</button>
+                <button onclick="hireSpecialist('merchant'); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1 rounded-xl bg-purple-700/80 hover:bg-purple-600 text-white font-medium">🪙 Comerciante</button>
+                <button id="btn-hire-supervisor" onclick="hireSupervisor(); renderNpcRosterUI && renderNpcRosterUI()" class="px-2 py-1 rounded-xl bg-slate-700/80 hover:bg-slate-600 text-amber-200 font-medium">👷‍♂️ <span id="sup-count-label">Sup</span></button>
+            </div>
+        </div>
+        <div class="flex items-center justify-between gap-1 border-t border-white/10 pt-2">
+            <button id="btn-daynight" onclick="toggleDayNightStep()" class="tool-btn px-2.5 py-1 rounded-lg border border-white/10 text-[11px]" title="Dia / Noite">☀️</button>
+            <button id="btn-sim-speed" data-keep-active="true" onclick="cycleSimSpeed()" class="tool-btn px-2.5 py-1 rounded-lg border border-white/10 text-[11px] text-amber-300" title="Velocidade">⚡<span id="speed-btn-label">1x</span></button>
+            <button id="btn-options-menu" data-keep-active="true" onclick="toggleOptionsPanel()" class="tool-btn px-2.5 py-1 rounded-lg border border-white/10 text-[11px]" title="Opções">⚙️</button>
+            <button id="btn-zen" onclick="toggleZenMode(true)" class="tool-btn px-2.5 py-1 rounded-lg border border-white/10 text-[11px]" title="Modo Zen (H)">📺</button>
+        </div>
+    </aside>
+
+    <!-- Popover de Opções do Simulador (aberto pelo ícone ⚙️ dentro do Celular) -->
+    <aside id="options-panel" class="hidden hud-hideable fixed bottom-20 right-3 sm:right-4 z-40 dock-surface rounded-2xl p-3 w-[280px] max-w-[92vw] space-y-2 shadow-2xl border border-white/15">
+        <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span class="text-xs font-semibold text-white">⚙️ Opções do Simulador</span>
+            <button onclick="toggleOptionsPanel(false)" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+            <button id="btn-screensaver" onclick="toggleScreensaverMode()" class="tool-btn flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-white/10 font-medium text-emerald-300">
+                <span>🌙</span><span id="screensaver-btn-label">Modo Relax</span>
+            </button>
+            <button id="btn-cinema-tour" onclick="toggleCinemaTour()" class="tool-btn flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-white/10 font-medium text-sky-200">
+                🎥 Tour
+            </button>
+            <button id="btn-weather" onclick="cycleWeatherManual()" class="tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium">🌤️ Clima</button>
+            <button id="btn-biome" onclick="cycleBiomeManual()" class="tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium">🌍 Bioma</button>
+            <button id="btn-camp-shift" data-keep-active="true" onclick="toggleCampNightMode()" class="tool-btn active px-2 py-1.5 rounded-lg border border-white/10 font-medium text-sky-200">🔄 Turno</button>
+            <button id="btn-risk-profile" data-keep-active="true" onclick="toggleRiskProfile()" class="tool-btn active px-2 py-1.5 rounded-lg border border-white/10 font-medium text-amber-200">⚡ Realista</button>
+            <button id="btn-ambient" data-keep-active="true" onclick="toggleAmbientMute()" class="tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium">🌿 ASMR</button>
+            <button id="btn-mute" onclick="toggleAudioMute()" class="tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium">🔊 Efeitos</button>
+            <button id="btn-xray" onclick="toggleXRayMode()" class="tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium">👁️ Raio-X</button>
+            <button id="tool-erase" onclick="selectTool('erase')" class="tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium">🗑️ Demolir</button>
+            <button id="btn-village-mode" data-keep-active="true" onclick="togglePersistentVillage()" class="tool-btn active px-2 py-1.5 rounded-lg border border-white/10 font-medium text-amber-200">
+                <span id="village-btn-label">Vila</span>
+            </button>
+            <button id="btn-playlist" onclick="togglePlaylistMode()" class="tool-btn active px-2 py-1.5 rounded-lg border border-white/10 font-medium">🔁 Auto</button>
+            <button id="btn-next-lot" onclick="advanceToNextVillageLot()" class="hidden tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium text-sky-200">⏩ Próx. Lote</button>
+            <button id="btn-diagnostics" onclick="toggleDiagnostics()" class="tool-btn px-2 py-1.5 rounded-lg border border-white/10 font-medium text-emerald-300">📊 FPS (P)</button>
+            <button id="btn-new-terrain" onclick="openCitySetupModal()" class="col-span-2 tool-btn px-2 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/15 font-semibold text-sky-200">🎲 Nova Cidade / Seed</button>
+        </div>
+    </aside>
+
+    <!-- DOCK INFERIOR ÚNICO & CLEAN: 4 CATEGORIAS + SUBMENU CONTEXTUAL -->
+    <div id="city-dock-stack" class="hud-hideable fixed safe-bottom left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5 max-w-[96vw]">
+
+        <!-- Sub-menu exibido APENAS quando uma categoria está aberta -->
+        <div id="city-build-palette" class="hidden dock-surface dock-scroll rounded-xl px-2 py-1 flex items-center gap-1 max-w-[96vw]">
+            <div data-cat-group="roads" class="hidden flex items-center gap-1">
+                <button data-city-tool="dirt-road" onclick="setCityBuildTool('dirt-road')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Arraste linha reta A→B (Grátis)">🛣️ Estrada de Terra</button>
+                <button data-city-tool="paved-street" onclick="setCityBuildTool('paved-street')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Arraste linha reta A→B (1🪨 1🪙/m)">🏙️ Rua Pavimentada</button>
+            </div>
+            <div data-cat-group="support" class="hidden flex items-center gap-1">
+                <button data-city-tool="unloading" onclick="setCityBuildTool('unloading')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Onde os caminhões descarregam materiais (1🪵 1🪨)">🚚 Baia Descarga</button>
+                <button data-city-tool="mixer" onclick="setCityBuildTool('mixer')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Onde operários batem massa (1🪵 2🪨)">🧱 Masseira</button>
+                <button data-city-tool="workbench" onclick="setCityBuildTool('workbench')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Corte de madeira e escoras (2🪵)">🪚 Bancada</button>
+                <button data-city-tool="stockyard" onclick="setCityBuildTool('stockyard')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Pátio de tijolos, aço e vigas (2🪵 1🪨)">📦 Depósito</button>
+                <button data-city-tool="mess-hall" onclick="setCityBuildTool('mess-hall')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Refeitório e bebedouro da equipe (3🪵 2🪙)">🍲 Lanchonete</button>
+                <button data-city-tool="tent" onclick="setCityBuildTool('tent')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Barraca de descanso noturno (2🪵 1🪙)">⛺ Barraca</button>
+                <button data-city-tool="floodlight" onclick="setCityBuildTool('floodlight')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Iluminação de turno noturno (1🪵 1⛓️ 2🪙)">💡 Refletor</button>
+            </div>
+            <div data-cat-group="city" class="hidden flex items-center gap-1">
+                <button data-city-tool="house-auto" onclick="setCityBuildTool('house-auto')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Casa pronta por planta sorteada (4🪵 2🪨 4🪙)">🏠 Casa Auto</button>
+                <button data-city-tool="house-custom" onclick="setCityBuildTool('house-custom')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium text-sky-200" title="Arraste L×C no terreno para tamanho exato">📐 Casa Tam.</button>
+                <button data-city-tool="building" onclick="setCityBuildTool('building')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Prédio Multi-Andar (6🪵 6🪨 4⛓️ 12🪙)">🏢 Prédio</button>
+                <button data-city-tool="bridge" onclick="setCityBuildTool('bridge')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Ponte sobre Rio (5🪵 5🪨 3⛓️ 8🪙)">🌉 Ponte</button>
+                <button data-city-tool="tower" onclick="setCityBuildTool('tower')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Torre / Farol (4🪵 4🪨 5⛓️ 10🪙)">🗼 Torre</button>
+            </div>
+            <div data-cat-group="economy" class="hidden flex items-center gap-1">
+                <button data-city-tool="farm" onclick="setCityBuildTool('farm')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium text-lime-300" title="Produz comida contínua (3🪵 4🪙)">🌾 Fazenda</button>
+                <button data-city-tool="lumberyard" onclick="setCityBuildTool('lumberyard')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium text-amber-300" title="Beneficia madeira das árvores (2🪵 3🪙)">🪵 Serraria</button>
+                <button data-city-tool="market" onclick="setCityBuildTool('market')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium text-purple-300" title="Gera moedas com comerciante (4🪵 2🪨 6🪙)">🏪 Mercado</button>
+            </div>
+        </div>
+
+        <!-- Barra Principal Compacta de 4 Categorias -->
+        <nav id="city-category-bar" class="dock-surface dock-scroll rounded-2xl px-2 py-1 flex items-center gap-1">
+            <button data-cat-btn="roads" onclick="toggleCityCategory('roads')" class="tool-btn px-3 py-1.5 rounded-xl border border-transparent text-xs font-medium">🛣️ Vias</button>
+            <button data-cat-btn="support" onclick="toggleCityCategory('support')" class="tool-btn px-3 py-1.5 rounded-xl border border-transparent text-xs font-medium">🏗️ Apoio</button>
+            <button data-cat-btn="city" onclick="toggleCityCategory('city')" class="tool-btn px-3 py-1.5 rounded-xl border border-transparent text-xs font-medium">🏠 Cidade</button>
+            <button data-cat-btn="economy" onclick="toggleCityCategory('economy')" class="tool-btn px-3 py-1.5 rounded-xl border border-transparent text-xs font-medium">🌾 Economia</button>
+            <button onclick="clearCitySelection()" class="tool-btn px-2.5 py-1.5 rounded-xl border border-transparent text-xs text-slate-400 hover:text-white" title="Cancelar ferramenta / fechar menu">✕</button>
+        </nav>
+    </div>
+
+    <!-- TELA INICIAL CINEMATOGRÁFICA (Cena 3D Viva ao Fundo) -->
+    <div id="city-setup-modal" class="fixed inset-0 z-50 bg-gradient-to-t from-slate-950/90 via-slate-950/35 to-slate-950/15 flex items-end sm:items-center justify-center p-4 sm:p-8">
+        <div class="dock-surface rounded-3xl p-5 sm:p-6 w-full max-w-lg space-y-4 border border-white/20 shadow-2xl">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-[10px] font-semibold text-emerald-200 mb-1.5">
+                        🌲 Vertical Slice · Bioma Floresta
+                    </div>
+                    <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-white">Mini Builders OKAMI</h1>
+                    <p class="text-xs text-slate-300 mt-0.5">Crie um mundo. Construa uma civilização.</p>
+                </div>
+                <button onclick="document.getElementById('city-setup-modal').classList.add('hidden')" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded-lg hover:bg-white/10" title="Fechar e observar o mundo">✕</button>
+            </div>
+
+            <!-- Visão Principal: 3 Ações Claras -->
+            <div id="title-home-view" class="space-y-2.5">
+                <button onclick="showTitleView('new')" class="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold tracking-wide transition shadow-lg flex items-center justify-between">
+                    <span>🌍 Nova Cidade</span>
+                    <span class="text-xs font-normal text-emerald-100">Criar mundo do zero →</span>
+                </button>
+                <button id="btn-continue-city" onclick="continueCityFromMenu()" class="w-full py-2.5 px-4 rounded-2xl bg-sky-600/80 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold transition flex items-center justify-between" disabled>
+                    <span>🏡 Continuar Cidade</span>
+                    <span id="continue-city-meta" class="text-[11px] font-normal text-sky-100">Nenhuma cidade salva</span>
+                </button>
+                <button onclick="showTitleView('settings')" class="w-full py-2.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-slate-100 text-xs font-semibold transition flex items-center justify-between">
+                    <span>⚙️ Configurações</span>
+                    <span class="text-[11px] font-normal text-slate-300">Áudio, clima, simulação & desempenho</span>
+                </button>
+            </div>
+
+            <!-- Visão Nova Cidade: Nome + Cartões de Modo + Avançado Recolhível -->
+            <div id="title-new-view" class="hidden space-y-3 text-xs">
+                <label class="block">
+                    <span class="text-slate-200 font-semibold">Nome do Supervisor</span>
+                    <input id="setup-sup-name" type="text" value="Supervisor Beto" maxlength="24" class="mt-1 w-full rounded-xl bg-slate-900/90 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+                </label>
+
+                <div class="space-y-1">
+                    <span class="text-slate-200 font-semibold">Regras da Cidade</span>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" data-mode-card="real" onclick="selectSetupGameMode('real')" class="text-left p-2.5 rounded-xl border-2 border-emerald-400 bg-emerald-500/15 transition">
+                            <div class="font-bold text-white">💼 Gestão Real</div>
+                            <div class="text-[10px] text-slate-300 mt-0.5 leading-snug">Extraia da natureza, pague fretes no 📱 celular e gerencie moedas.</div>
+                        </button>
+                        <button type="button" data-mode-card="sandbox" onclick="selectSetupGameMode('sandbox')" class="text-left p-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition">
+                            <div class="font-bold text-white">🎨 Sandbox Livre</div>
+                            <div class="text-[10px] text-slate-300 mt-0.5 leading-snug">Recursos infinitos para planejar e construir sem custos.</div>
+                        </button>
+                    </div>
+                    <input id="setup-sandbox" type="checkbox" class="hidden" />
+                </div>
+
+                <details class="rounded-xl bg-white/5 border border-white/10 px-3 py-2">
+                    <summary class="cursor-pointer font-semibold text-slate-200 select-none">🎛️ Opções Avançadas de Geração</summary>
+                    <div class="grid grid-cols-2 gap-2.5 pt-2.5">
+                        <label class="block">
+                            <span class="text-slate-300 font-medium">Seed do Mundo</span>
+                            <div class="mt-1 flex gap-1">
+                                <input id="setup-seed" type="number" value="4280" class="w-full rounded-xl bg-slate-900/90 border border-white/15 px-2.5 py-1.5 text-white" />
+                                <button type="button" onclick="document.getElementById('setup-seed').value = Math.floor(1000 + Math.random() * 8999)" class="px-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white">🎲</button>
+                            </div>
+                        </label>
+                        <label class="block">
+                            <span class="text-slate-300 font-medium">Bioma Inicial</span>
+                            <select id="setup-biome" class="mt-1 w-full rounded-xl bg-slate-900/90 border border-white/15 px-2.5 py-1.5 text-white">
+                                <option value="forest" selected>🌲 Floresta (Principal)</option>
+                                <option value="coast">🏖️ Litoral</option>
+                                <option value="cerrado">🌾 Cerrado</option>
+                                <option value="mountain">⛰️ Montanha</option>
+                            </select>
+                        </label>
+                    </div>
+                </details>
+
+                <div class="flex items-center gap-2 pt-1">
+                    <button type="button" onclick="showTitleView('home')" class="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold transition">← Voltar</button>
+                    <button type="button" onclick="startCityFromMenu()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold tracking-wide transition shadow-lg">
+                        🚀 Começar Cidade
+                    </button>
+                </div>
+            </div>
+
+            <!-- Visão Configurações -->
+            <div id="title-settings-view" class="hidden space-y-2.5 text-xs">
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="toggleAudioMute()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-100 font-medium">🔊 Efeitos da Obra</button>
+                    <button onclick="toggleAmbientMute()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-100 font-medium">🌿 Som Ambiente ASMR</button>
+                    <button onclick="toggleRiskProfile()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-amber-200 font-medium">⚡ Imprevistos Realistas</button>
+                    <button onclick="toggleDiagnostics()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-emerald-300 font-medium">📊 Diagnóstico FPS (P)</button>
+                </div>
+                <button type="button" onclick="showTitleView('home')" class="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold transition">← Voltar ao Menu</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Selo de Laudo Técnico (Aprovado / Falha Estrutural) -->
     <div id="laudo-badge" class="hidden"></div>
@@ -144,8 +293,8 @@
         </div>
     </div>
 
-    <!-- DOCK ÚNICO CONTEXTUAL POR MODO E FASE (Deslizável no celular, centralizado no desktop) -->
-    <footer class="hud-hideable fixed safe-bottom left-1/2 -translate-x-1/2 dock-surface dock-scroll rounded-2xl px-2 py-1.5 z-20 max-w-[96vw]">
+    <!-- DOCK CONTEXTUAL DE OBRA ATIVA (Exibido acima das categorias apenas quando há uma obra em andamento) -->
+    <footer id="phase-dock-wrap" class="hidden hud-hideable fixed bottom-24 left-1/2 -translate-x-1/2 dock-surface dock-scroll rounded-2xl px-2 py-1.5 z-20 max-w-[96vw]">
 
         <!-- ==================== MODO CASA ==================== -->
         <div data-mode-dock="house" data-phase-dock="0" class="flex items-center gap-1">
@@ -377,12 +526,14 @@
     <script src="./src/core/biomes.js"></script>
     <script src="./src/core/events.js"></script>
     <script src="./src/ui/hud.js"></script>
+    <script src="./src/world/chunkManager.js"></script>
     <script src="./src/world/terrain.js"></script>
     <script src="./src/world/mixer.js"></script>
     <script src="./src/world/workbench.js"></script>
     <script src="./src/world/regionManager.js"></script>
     <script src="./src/world/constructionManager.js"></script>
     <script src="./src/world/worldManager.js"></script>
+    <script src="./src/world/cityManager.js"></script>
     <script src="./src/entities/siteLogistics.js"></script>
     <script src="./src/modes/house/blueprint.js"></script>
     <script src="./src/modes/house/foundation.js"></script>

@@ -184,6 +184,27 @@
             w.rig.torsoPivot.rotation.x = Math.sin(t * 3) * 0.05;
             w.rig.armL.rotation.x = -0.6;
             w.rig.armR.rotation.x = -0.6;
+        } else if (tk.type === 'social-chat' || tk.type === 'assist-peer') {
+            if (tk.peer && tk.peer.rig && tk.peer.rig.group) {
+                const pp = tk.peer.rig.group.position;
+                w.rig.group.rotation.y = Math.atan2(pp.x - pos.x, pp.z - pos.z);
+            }
+            w.rig.torsoPivot.rotation.x = 0.05 + Math.sin(t * 6) * 0.06;
+            w.rig.armL.rotation.x = -0.45 + Math.sin(t * 5) * 0.25;
+            w.rig.armR.rotation.x = -0.65 - Math.sin(t * 5) * 0.25;
+        } else if (tk.type === 'visit-home' || tk.type === 'stroll-bridge') {
+            w.rig.torsoPivot.rotation.x = Math.sin(t * 2) * 0.04;
+            w.rig.armL.rotation.x = -0.15;
+            w.rig.armR.rotation.x = -0.15;
+        } else if (tk.type === 'tend-garden') {
+            const swing = Math.sin(t * 14);
+            w.rig.torsoPivot.rotation.x = 0.30 + swing * 0.10;
+            w.rig.armL.rotation.x = -0.75 + swing * 0.40;
+            w.rig.armR.rotation.x = -0.85 + swing * 0.45;
+            if (w.subTimer > 0.32) {
+                w.subTimer = 0;
+                MO.spawnBurst(pos.x, pos.y + 0.14, pos.z, 0x4ade80, 3, 0.04);
+            }
         } else if (tk.type === 'inspect-site' || tk.type === 'demarcate-site' || tk.type === 'demarcate-east') {
             setWorkerTool(w.rig, 'clipboard');
             w.rig.torsoPivot.rotation.x = 0.10;
@@ -211,16 +232,21 @@
             w.rig.torsoPivot.rotation.x = 0.30;
             w.rig.armL.rotation.x = -1.1 + (w.timer / dur) * 0.45;
             w.rig.armR.rotation.x = -1.1 + (w.timer / dur) * 0.45;
-        } else if (tk.type === 'weed' || tk.type === 'level-spot' || tk.type === 'dig' || tk.type === 'tw-dig' || tk.type === 'build-road') {
+        } else if (tk.type === 'weed' || tk.type === 'level-spot' || tk.type === 'dig' || tk.type === 'tw-dig' || tk.type === 'build-road' || tk.type === 'harvest-ore' || tk.type === 'work-farm') {
             const swing = Math.sin(t * 22);
             w.rig.torsoPivot.rotation.x = 0.35 + swing * 0.14;
             w.rig.armL.rotation.x = -0.85 + swing * 0.55;
             w.rig.armR.rotation.x = -0.95 + swing * 0.65;
             if (w.subTimer > 0.22) {
                 w.subTimer = 0;
-                const dustHex = tk.type === 'weed' ? 0x4d7c0f : (tk.type === 'build-road' ? 0x8c7253 : 0x7a654d);
+                const dustHex = tk.type === 'weed' || tk.type === 'work-farm' ? 0x4d7c0f : (tk.type === 'build-road' ? 0x8c7253 : 0x7a654d);
                 MO.spawnBurst(pos.x, pos.y + 0.12, pos.z, dustHex, 4, 0.05);
             }
+        } else if (tk.type === 'work-market') {
+            setWorkerTool(w.rig, 'clipboard');
+            w.rig.torsoPivot.rotation.x = 0.06;
+            w.rig.armL.rotation.x = -0.85;
+            w.rig.armR.rotation.x = -0.45 + Math.sin(t * 5) * 0.2;
         } else if (tk.type === 'mix-mortar') {
             w.rig.group.rotation.y = Math.atan2(MO.STATION_MIXER.x - pos.x, MO.STATION_MIXER.z - pos.z);
             const pushPull = Math.sin(t * 16);
@@ -250,7 +276,8 @@
             tk.type === 'br-girder' || tk.type === 'br-rail' || tk.type === 'bld-struct' ||
             tk.type === 'tw-scaf' || tk.type === 'tw-steel' || tk.type === 'tw-top' ||
             tk.type === 'build-tent' || tk.type === 'build-mess' || tk.type === 'build-floodlight' ||
-            tk.type === 'build-unloading' || tk.type === 'build-mixer' || tk.type === 'build-workbench' || tk.type === 'build-yards'
+            tk.type === 'build-unloading' || tk.type === 'build-mixer' || tk.type === 'build-workbench' || tk.type === 'build-yards' ||
+            tk.type === 'build-city-struct' || tk.type === 'harvest-wood'
         ) {
             setWorkerTool(w.rig, 'hammer');
             const hammerHit = Math.sin(t * 26);
@@ -314,10 +341,12 @@
                 MO.SoundFX.playMortarSquish();
             } else if (tk.type === 'demarcate-site') {
                 if (MO.worldManager && MO.worldManager.demarcateWestInfrastructure) MO.worldManager.demarcateWestInfrastructure();
+                if (MO.worldManager && MO.worldManager.saveToStorage) MO.worldManager.saveToStorage();
                 if (MO.SoundFX && MO.SoundFX.playRadioBlip) MO.SoundFX.playRadioBlip();
                 if (MO.showToast) MO.showToast('📐 Supervisor demarcou estradas, baia, masseira, bancada e estoques!', '👷‍♂️');
             } else if (tk.type === 'demarcate-east') {
                 if (MO.worldManager && MO.worldManager.demarcateEastRoads) MO.worldManager.demarcateEastRoads();
+                if (MO.worldManager && MO.worldManager.saveToStorage) MO.worldManager.saveToStorage();
                 if (MO.showToast) MO.showToast('📐 Supervisor demarcou o acesso do Banco Leste após a ponte!', '👷‍♂️');
             } else if (tk.type === 'build-road') {
                 const seg = tk.roadSeg;
@@ -325,18 +354,23 @@
                     seg.built = true;
                     seg.res = false;
                     if (MO.paintRoadWeight) {
-                        MO.paintRoadWeight(seg.x, seg.z, 1.35, 0.96);
+                        MO.paintRoadWeight(seg.x, seg.z, 1.35, 0.96, seg.kind || 'dirt', true);
                         MO.updateTerrainGeometry();
+                    }
+                    if (seg.cityKey && state.city && state.city.roadTiles && state.city.roadTiles.has(seg.cityKey)) {
+                        const tile = state.city.roadTiles.get(seg.cityKey);
+                        tile.built = true;
+                        if (MO.cityManager && MO.cityManager.renderCityRoadTile) MO.cityManager.renderCityRoadTile(tile);
                     }
                     MO.SoundFX.playDirtShovel();
                     const infra = state.villageInfra;
                     if (infra) {
-                        const westSegs = infra.roadSegments.filter(s => s.bank === 'west');
-                        if (westSegs.length > 0 && westSegs.every(s => s.built) && !infra.roadBuilt) {
+                        const mainSegs = infra.roadSegments.filter(s => s.bank === 'west' || s.bank === 'city');
+                        if (mainSegs.length > 0 && mainSegs.every(s => s.built) && !infra.roadBuilt) {
                             infra.roadBuilt = true;
                             if (MO.worldManager) MO.worldManager.renderDemarcationLines();
                             if (MO.flushQueuedTruckIfReady) MO.flushQueuedTruckIfReady();
-                            if (MO.showToast) MO.showToast('🛣️ Estrada de terra concluída! Caminhões já podem entrar pela via.', '🚚');
+                            if (MO.showToast) MO.showToast('🛣️ Estrada concluída! Caminhões já podem entrar pela via.', '🚚');
                         }
                         const eastSegs = infra.roadSegments.filter(s => s.bank === 'east');
                         if (infra.eastRoadDemarcated && eastSegs.length > 0 && eastSegs.every(s => s.built) && !infra.eastRoadBuilt) {
@@ -364,13 +398,55 @@
             } else if (tk.type === 'build-yards') {
                 if (state.villageInfra) state.villageInfra.yardsRes = false;
                 if (MO.setStockYardsBuilt) MO.setStockYardsBuilt(true);
-                if (MO.worldManager) MO.worldManager.renderDemarcationLines();
+                if (MO.worldManager) {
+                    MO.worldManager.renderDemarcationLines();
+                    if (MO.worldManager.saveToStorage) MO.worldManager.saveToStorage();
+                }
                 if (MO.triggerDeliveryTruck) MO.triggerDeliveryTruck('wood');
                 MO.SoundFX.playHammerWood();
             } else if (tk.type === 'saw-wood') {
                 if (MO.animateWorkbenchSaw) MO.animateWorkbenchSaw(false, 0);
                 if (MO.completeWoodSawing) MO.completeWoodSawing();
                 if (MO.SoundFX && MO.SoundFX.playWoodSaw) MO.SoundFX.playWoodSaw();
+            } else if (tk.type === 'build-city-struct') {
+                const st = tk.cityStruct;
+                if (st) {
+                    st.built = true;
+                    st.res = false;
+                    if (st.guide) st.guide.visible = false;
+                    if (st.builtGroup) st.builtGroup.visible = true;
+                    MO.SoundFX.playHammerWood();
+                    MO.spawnBurst(st.x, (MO.getTerrainHeight ? MO.getTerrainHeight(st.x, st.z) : 0.3) + 0.5, st.z, 0xfbbf24, 10, 0.08);
+                    if (MO.showToast) MO.showToast(`✅ ${st.kind.toUpperCase()} concluído na cidade!`, '🏗️');
+                }
+            } else if (tk.type === 'harvest-wood') {
+                const taken = (tk.resourceNode && MO.chunkManager) ? MO.chunkManager.harvestNode(tk.resourceNode, 1) : 1;
+                if (tk.resourceNode) tk.resourceNode.res = false;
+                if (taken > 0) {
+                    if (MO.cityManager) MO.cityManager.addResources({ wood: 3 });
+                    if (MO.deliverRawWood && MO.state.villageInfra && MO.state.villageInfra.workbenchBuilt) {
+                        MO.deliverRawWood(1);
+                    }
+                    MO.SoundFX.playHammerWood();
+                }
+            } else if (tk.type === 'harvest-ore') {
+                const node = tk.resourceNode;
+                const taken = (node && MO.chunkManager) ? MO.chunkManager.harvestNode(node, 1) : 1;
+                if (node) node.res = false;
+                if (taken > 0 && MO.cityManager) {
+                    if (node && node.kind === 'mine') MO.cityManager.addResources({ stone: 3, iron: 2 });
+                    else if (node && node.kind === 'iron') MO.cityManager.addResources({ iron: 2, stone: 1 });
+                    else if (tk.cityStruct && tk.cityStruct.kind === 'mine') MO.cityManager.addResources({ stone: 2, iron: 1 });
+                    else MO.cityManager.addResources({ stone: 3 });
+                    MO.SoundFX.playMetalClang();
+                }
+            } else if (tk.type === 'work-farm') {
+                if (MO.cityManager) MO.cityManager.addResources({ food: 3 });
+                MO.SoundFX.playDirtShovel();
+            } else if (tk.type === 'work-market') {
+                const coins = tk.cityStruct ? 4 : 2;
+                if (MO.cityManager) MO.cityManager.addResources({ coins });
+                MO.SoundFX.playElectricSwitch();
             } else if (tk.type !== 'inspect-site') {
                 const modePlugin = MO.modes[state.mode];
                 if (modePlugin && modePlugin.completeWorkerTask) {

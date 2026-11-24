@@ -71,7 +71,7 @@
             const reason = missingBeam ? 'TELHADO ASSENTADO SEM CINTA SUPERIOR'
                 : (missingProp ? 'VERGA CEDEU SEM ESCORAMENTO' : 'TRAÇO DE CONCRETO FRACO NA CINTA');
             MO.triggerStructuralCollapse(reason, { x: 0, y: state.houseBaseY + MO.WALL_HEIGHT + 0.2, z: 0 });
-            if (!state.screensaver) return;
+            if (!state.screensaver && !state.cityMode) return;
         }
 
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;

@@ -5,6 +5,35 @@
     const GRID_N = 72;
     const WORLD_HALF = 14.4;
     const CELL = (WORLD_HALF * 2) / GRID_N; // 0.40m por célula (passa limpo em portas de 0.68m)
+    const MAX_PATH_CACHE = 256;
+
+    const navCache = {
+        manualVersion: 1,
+        lastSig: '',
+        baseObstacles: null,
+        baseBlocked: null,
+        paths: new Map(),
+        hits: 0,
+        misses: 0
+    };
+
+    MO.invalidateNavigationCache = function() {
+        navCache.manualVersion += 1;
+        navCache.lastSig = '';
+        navCache.baseObstacles = null;
+        navCache.baseBlocked = null;
+        navCache.paths.clear();
+    };
+
+    function getNavigationStats() {
+        return {
+            version: navCache.manualVersion,
+            hits: navCache.hits,
+            misses: navCache.misses,
+            cachedPaths: navCache.paths.size
+        };
+    }
+    MO.getNavigationStats = getNavigationStats;
 
     function distPointToSegmentSq(px, pz, x1, z1, x2, z2) {
         const dx = x2 - x1;
@@ -19,13 +48,27 @@
         return { dSq: (px - cx) * (px - cx) + (pz - cz) * (pz - cz), cx, cz };
     }
 
-    function collectObstacles(w) {
+    function computeObstacleSignature() {
+        const state = MO.state;
+        if (!state) return '0';
+        const wallsPlaced = Array.isArray(state.walls)
+            ? state.walls.reduce((acc, wl) => acc + (wl.isPlastered ? 10 : 0) + (wl.slots ? (wl.slots.some(s => s.placed) ? 1 : 0) : 0), 0)
+            : 0;
+        const murosBuilt = Array.isArray(state.muros) ? state.muros.filter(m => m.built).length : 0;
+        const colsDone = Array.isArray(state.columns) ? state.columns.filter(c => c.hasFormwork || c.concreted).length : 0;
+        const tentsBuilt = (state.camp && Array.isArray(state.camp.tents)) ? state.camp.tents.filter(t => t.built).length : 0;
+        const messBuilt = (state.camp && state.camp.messHall && state.camp.messHall.built) ? 1 : 0;
+        const archCount = MO.constructionManager ? MO.constructionManager.getCompletedConstructions().length : 0;
+        const bridgeReady = (state.villageInfra && state.villageInfra.bridgeUnlocked) ? 1 : 0;
+        const bldDone = (state.building && state.building.floors && state.building.floors[0] && (state.building.floors[0].hasWalls || state.building.floors[0].wallDone || state.building.floors[0].structDone)) ? 1 : 0;
+        return `${navCache.manualVersion}|${state.seed}|${state.mode}|${wallsPlaced}|${murosBuilt}|${colsDone}|${tentsBuilt}|${messBuilt}|${archCount}|${bridgeReady}|${bldDone}`;
+    }
+
+    function buildBaseObstacles() {
         const state = MO.state;
         const segments = [];
         const circles = [];
         const doorCenters = [];
-        const ignoreTentId = (w && w.task && w.task.type === 'sleep-tent' && w.task.tent) ? w.task.tent.id : -1;
-        const ignoreColRef = (w && w.task && w.task.col) ? w.task.col : null;
 
         if (state.mode === 'house' && state.walls) {
             state.walls.forEach(wl => {
@@ -65,9 +108,8 @@
 
             if (state.columns) {
                 state.columns.forEach(col => {
-                    if (col === ignoreColRef) return;
                     if (col.hasFormwork || col.concreted) {
-                        circles.push({ x: col.x, z: col.z, r: 0.20 });
+                        circles.push({ x: col.x, z: col.z, r: 0.20, colRef: col });
                     }
                 });
             }
@@ -75,14 +117,15 @@
 
         if (state.mode === 'building' && state.building && state.building.floors && state.building.floors[0]) {
             const f0 = state.building.floors[0];
-            if (f0.wallDone || f0.structDone) {
-                const bz = -0.6;
-                doorCenters.push({ x: 0, z: bz + 1.6 });
-                segments.push({ x1: -1.8, z1: bz - 1.6, x2: 1.8, z2: bz - 1.6, r: 0.24 });
-                segments.push({ x1: -1.8, z1: bz - 1.6, x2: -1.8, z2: bz + 1.6, r: 0.24 });
-                segments.push({ x1: 1.8, z1: bz - 1.6, x2: 1.8, z2: bz + 1.6, r: 0.24 });
-                segments.push({ x1: -1.8, z1: bz + 1.6, x2: -0.5, z2: bz + 1.6, r: 0.24 });
-                segments.push({ x1: 0.5, z1: bz + 1.6, x2: 1.8, z2: bz + 1.6, r: 0.24 });
+            if (f0.hasWalls || f0.wallDone || f0.structDone) {
+                const bx = state.building.originX !== undefined ? state.building.originX : 0;
+                const bz = state.building.originZ !== undefined ? state.building.originZ : -0.6;
+                doorCenters.push({ x: bx, z: bz + 1.6 });
+                segments.push({ x1: bx - 1.8, z1: bz - 1.6, x2: bx + 1.8, z2: bz - 1.6, r: 0.24 });
+                segments.push({ x1: bx - 1.8, z1: bz - 1.6, x2: bx - 1.8, z2: bz + 1.6, r: 0.24 });
+                segments.push({ x1: bx + 1.8, z1: bz - 1.6, x2: bx + 1.8, z2: bz + 1.6, r: 0.24 });
+                segments.push({ x1: bx - 1.8, z1: bz + 1.6, x2: bx - 0.5, z2: bz + 1.6, r: 0.24 });
+                segments.push({ x1: bx + 0.5, z1: bz + 1.6, x2: bx + 1.8, z2: bz + 1.6, r: 0.24 });
             }
         }
 
@@ -90,15 +133,12 @@
 
         if (state.camp && state.camp.tents) {
             state.camp.tents.forEach(tn => {
-                if (tn.built && tn.id !== ignoreTentId) {
-                    circles.push({ x: tn.x, z: tn.z, r: 0.58 });
+                if (tn.built) {
+                    circles.push({ x: tn.x, z: tn.z, r: 0.58, tentId: tn.id });
                 }
             });
             if (state.camp.messHall && state.camp.messHall.built) {
-                const isCampTask = w && w.task && (w.task.type === 'eat-meal' || w.task.type === 'camp-hangout' || w.task.type === 'shelter-rain' || w.task.type === 'drink-water');
-                if (!isCampTask) {
-                    circles.push({ x: state.camp.messHall.x, z: state.camp.messHall.z, r: 0.52 });
-                }
+                circles.push({ x: state.camp.messHall.x, z: state.camp.messHall.z, r: 0.52, isMessHall: true });
             }
         }
 
@@ -110,6 +150,39 @@
         }
 
         return { segments, circles, doorCenters };
+    }
+
+    function ensureNavCacheFresh() {
+        const sig = computeObstacleSignature();
+        if (sig !== navCache.lastSig || !navCache.baseObstacles) {
+            navCache.lastSig = sig;
+            navCache.baseObstacles = buildBaseObstacles();
+            navCache.baseBlocked = null;
+            navCache.paths.clear();
+        }
+        return navCache.baseObstacles;
+    }
+
+    function collectObstacles(w) {
+        const base = ensureNavCacheFresh();
+        const ignoreTentId = (w && w.task && w.task.type === 'sleep-tent' && w.task.tent) ? w.task.tent.id : -1;
+        const ignoreColRef = (w && w.task && w.task.col) ? w.task.col : null;
+        const isCampTask = Boolean(w && w.task && (w.task.type === 'eat-meal' || w.task.type === 'camp-hangout' || w.task.type === 'shelter-rain' || w.task.type === 'drink-water'));
+
+        if (ignoreTentId === -1 && !ignoreColRef && !isCampTask) {
+            return { ...base, usesCustomFilter: false };
+        }
+        return {
+            segments: base.segments,
+            doorCenters: base.doorCenters,
+            circles: base.circles.filter(c => {
+                if (ignoreTentId !== -1 && c.tentId === ignoreTentId) return false;
+                if (ignoreColRef && c.colRef === ignoreColRef) return false;
+                if (isCampTask && c.isMessHall) return false;
+                return true;
+            }),
+            usesCustomFilter: true
+        };
     }
 
     function worldToGrid(x, z) {
@@ -132,12 +205,16 @@
         const infra = MO.state.villageInfra;
         const bz = (infra && infra.bridgeZ !== undefined) ? infra.bridgeZ : -0.6;
         if (infra && infra.bridgeUnlocked && Math.abs(wz - bz) < 0.92) return false;
+        if (MO.state.city && Array.isArray(MO.state.city.structures)) {
+            const onBridge = MO.state.city.structures.some(st => st.kind === 'bridge' && st.built && Math.abs(wz - st.z) < 1.35);
+            if (onBridge) return false;
+        }
         return true;
     }
     MO.isRiverBlockedAt = isRiverBlockedAt;
 
     function isCellBlocked(wx, wz, segments, circles, doorCenters) {
-        if (Math.hypot(wx, wz) > MO.DIORAMA_R - 0.60) return true;
+        if (!MO.state.infiniteWorld && Math.hypot(wx, wz) > MO.DIORAMA_R - 0.60) return true;
         if (isRiverBlockedAt(wx, wz)) return true;
         // Garante corredor livre pelo centro das portas!
         for (let i = 0; i < doorCenters.length; i++) {
@@ -173,21 +250,65 @@
     };
 
     MO.computeWorkerPath = function(w, startX, startZ, goalX, goalZ) {
-        const { segments, circles, doorCenters } = collectObstacles(w);
+        const { segments, circles, doorCenters, usesCustomFilter } = collectObstacles(w);
         const crossesRiver = MO.state.unifiedVillage && MO.getRiverCenterX
             && ((startX - MO.getRiverCenterX(startZ)) * (goalX - MO.getRiverCenterX(goalZ)) <= 0);
         if (segments.length === 0 && !crossesRiver) return [{ x: goalX, z: goalZ }];
 
-        const startC = worldToGrid(startX, startZ);
-        const goalC = worldToGrid(goalX, goalZ);
+        const useLocalCore = !MO.state.infiniteWorld || Math.max(Math.abs(startX), Math.abs(startZ), Math.abs(goalX), Math.abs(goalZ)) < WORLD_HALF - 1.5;
+        const midX = useLocalCore ? 0 : (startX + goalX) * 0.5;
+        const midZ = useLocalCore ? 0 : (startZ + goalZ) * 0.5;
+        const localHalf = useLocalCore
+            ? WORLD_HALF
+            : Math.max(WORLD_HALF, Math.ceil(Math.max(Math.abs(goalX - startX), Math.abs(goalZ - startZ)) * 0.65) + 6);
+        const localCell = (localHalf * 2) / GRID_N;
+
+        const toGrid = (x, z) => ({
+            gx: Math.max(0, Math.min(GRID_N - 1, Math.floor((x - midX + localHalf) / localCell))),
+            gz: Math.max(0, Math.min(GRID_N - 1, Math.floor((z - midZ + localHalf) / localCell)))
+        });
+        const toWorld = (gx, gz) => ({
+            x: midX - localHalf + (gx + 0.5) * localCell,
+            z: midZ - localHalf + (gz + 0.5) * localCell
+        });
+
+        const startC = toGrid(startX, startZ);
+        const goalC = toGrid(goalX, goalZ);
         if (startC.gx === goalC.gx && startC.gz === goalC.gz) return [{ x: goalX, z: goalZ }];
 
-        const blocked = new Uint8Array(GRID_N * GRID_N);
-        for (let gz = 0; gz < GRID_N; gz++) {
-            for (let gx = 0; gx < GRID_N; gx++) {
-                const wp = gridToWorld(gx, gz);
-                if (isCellBlocked(wp.x, wp.z, segments, circles, doorCenters)) {
-                    blocked[gz * GRID_N + gx] = 1;
+        const cacheKey = (useLocalCore && !usesCustomFilter) ? `${startC.gx},${startC.gz}>${goalC.gx},${goalC.gz}` : null;
+        if (cacheKey && navCache.paths.has(cacheKey)) {
+            navCache.hits += 1;
+            const cachedPts = navCache.paths.get(cacheKey);
+            const result = cachedPts.map(pt => ({ x: pt.x, z: pt.z }));
+            if (result.length > 0) result[result.length - 1] = { x: goalX, z: goalZ };
+            return result;
+        }
+        navCache.misses += 1;
+
+        let blocked;
+        if (useLocalCore && !usesCustomFilter) {
+            if (!navCache.baseBlocked) {
+                const grid = new Uint8Array(GRID_N * GRID_N);
+                for (let gz = 0; gz < GRID_N; gz++) {
+                    for (let gx = 0; gx < GRID_N; gx++) {
+                        const wp = toWorld(gx, gz);
+                        if (isCellBlocked(wp.x, wp.z, segments, circles, doorCenters)) {
+                            grid[gz * GRID_N + gx] = 1;
+                        }
+                    }
+                }
+                navCache.baseBlocked = grid;
+            }
+            blocked = new Uint8Array(navCache.baseBlocked);
+        } else {
+            blocked = new Uint8Array(GRID_N * GRID_N);
+            for (let gz = 0; gz < GRID_N; gz++) {
+                for (let gx = 0; gx < GRID_N; gx++) {
+                    const wp = toWorld(gx, gz);
+                    if (isCellBlocked(wp.x, wp.z, segments, circles, doorCenters)) {
+                        blocked[gz * GRID_N + gx] = 1;
+                    }
                 }
             }
         }
@@ -254,12 +375,20 @@
         while (trace !== -1 && trace !== startIdx) {
             const gx = trace % GRID_N;
             const gz = Math.floor(trace / GRID_N);
-            rawPath.push(gridToWorld(gx, gz));
+            rawPath.push(gridToWorld ? toWorld(gx, gz) : gridToWorld(gx, gz));
             trace = parent[trace];
         }
         rawPath.reverse();
         if (rawPath.length > 0) rawPath[rawPath.length - 1] = { x: goalX, z: goalZ };
-        return rawPath.length > 0 ? rawPath : [{ x: goalX, z: goalZ }];
+        const finalPath = rawPath.length > 0 ? rawPath : [{ x: goalX, z: goalZ }];
+        if (cacheKey) {
+            if (navCache.paths.size >= MAX_PATH_CACHE) {
+                const firstKey = navCache.paths.keys().next().value;
+                navCache.paths.delete(firstKey);
+            }
+            navCache.paths.set(cacheKey, finalPath.map(pt => ({ x: pt.x, z: pt.z })));
+        }
+        return finalPath;
     };
 
     MO.resolveWorkerPhysics = function(w, nextX, nextZ) {
@@ -316,11 +445,13 @@
                 }
             });
 
-            const rMax = MO.DIORAMA_R - 0.55;
-            const rCur = Math.hypot(x, z);
-            if (rCur > rMax) {
-                x = (x / rCur) * rMax;
-                z = (z / rCur) * rMax;
+            if (!MO.state.infiniteWorld) {
+                const rMax = MO.DIORAMA_R - 0.55;
+                const rCur = Math.hypot(x, z);
+                if (rCur > rMax) {
+                    x = (x / rCur) * rMax;
+                    z = (z / rCur) * rMax;
+                }
             }
             if (isRiverBlockedAt(x, z)) {
                 const rx = MO.getRiverCenterX(z);

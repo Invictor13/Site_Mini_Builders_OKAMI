@@ -313,22 +313,24 @@
         MO.SoundFX.playMortarSquish();
     }
 
-    function finishBuildingRoof() {
+    function finishBuildingRoof(skipRiskCheck) {
         const state = MO.state;
         const bld = state.building;
         if (bld.roofDone) return;
 
         const bx = bld.originX !== undefined ? bld.originX : 0;
         const bz = bld.originZ !== undefined ? bld.originZ : -0.6;
-        if (state.riskProfile === 'realistic' && state.structural.integrity < 72 && !state.structural.repairedOnce) {
+        if (!skipRiskCheck && state.riskProfile === 'realistic' && state.structural.integrity < 72 && !state.structural.repairedOnce) {
             MO.triggerStructuralCollapse('SOBRECARGA NA LAJE SUPERIOR DO EDIFÍCIO', { x: bx, y: 2.5, z: bz });
-            if (!state.screensaver) return;
+            if (!state.screensaver && !state.cityMode) return;
         }
 
         bld.roofDone = true;
         if (bld.roofGroup) bld.roofGroup.visible = true;
-        MO.approveStructure(`✅ HABITE-SE APROVADO · ${bld.numFloors} PAVIMENTOS`);
-        MO.showToast(`🏢 Edifício de ${bld.numFloors} andares concluído com Heliponto!`, '🏆');
+        if (!skipRiskCheck) {
+            MO.approveStructure(`✅ HABITE-SE APROVADO · ${bld.numFloors} PAVIMENTOS`);
+            MO.showToast(`🏢 Edifício de ${bld.numFloors} andares concluído com Heliponto!`, '🏆');
+        }
     }
 
     MO.advanceBuildingPhase2 = function() {
@@ -480,4 +482,12 @@
     MO.advanceBuildingPhase2 = MO.advanceBuildingPhase2;
     MO.advanceBuildingPhase3 = MO.advanceBuildingPhase3;
     MO.finishBuildingRoof = finishBuildingRoof;
+    MO.buildingHelpers = {
+        buildFloorStructure,
+        pourFloorSlab,
+        buildFloorWalls,
+        installFloorMEP,
+        finishFloorFacade,
+        finishBuildingRoof
+    };
 })(window.MO = window.MO || {});

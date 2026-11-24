@@ -94,15 +94,25 @@
             if (!grp || !MO.resources || typeof THREE === 'undefined') return;
             MO.resources.clearGroup(grp);
             const infra = MO.state.villageInfra;
-            if (!infra || !infra.demarcated) return;
+            if (!infra) return;
+            const playerDriven = Boolean(MO.state.cityMode && MO.state.city && MO.state.city.playerDriven);
+            if (!playerDriven && !infra.demarcated) return;
 
-            // Demarcações de infraestrutura (Descarga, Masseira, Bancada, Estoques)
-            drawDemarcationRect(grp, MO.STATION_UNLOAD.x, MO.STATION_UNLOAD.z, 1.3, 1.0, 0x38bdf8);
-            drawDemarcationRect(grp, MO.STATION_MIXER.x, MO.STATION_MIXER.z, 1.1, 0.9, 0xf59e0b);
-            drawDemarcationRect(grp, MO.STATION_WORKBENCH.x, MO.STATION_WORKBENCH.z, 1.5, 0.8, 0x10b981);
-            drawDemarcationRect(grp, MO.STATION_BRICK.x, MO.STATION_BRICK.z, 1.0, 1.0, 0xf97316);
+            // Em modo Cidade (playerDriven), só exibe contorno de demarcação para estações colocadas pelo jogador que ainda estão em construção
+            if (!playerDriven || (infra.unloadingPlaced && !infra.unloadingBuilt)) {
+                drawDemarcationRect(grp, MO.STATION_UNLOAD.x, MO.STATION_UNLOAD.z, 1.3, 1.0, 0x38bdf8);
+            }
+            if (!playerDriven || (infra.mixerPlaced && !infra.mixerBuilt)) {
+                drawDemarcationRect(grp, MO.STATION_MIXER.x, MO.STATION_MIXER.z, 1.1, 0.9, 0xf59e0b);
+            }
+            if (!playerDriven || (infra.workbenchPlaced && !infra.workbenchBuilt)) {
+                drawDemarcationRect(grp, MO.STATION_WORKBENCH.x, MO.STATION_WORKBENCH.z, 1.5, 0.8, 0x10b981);
+            }
+            if (!playerDriven || (infra.yardsPlaced && !infra.stockYardsBuilt)) {
+                drawDemarcationRect(grp, MO.STATION_BRICK.x, MO.STATION_BRICK.z, 1.0, 1.0, 0xf97316);
+            }
 
-            // Estacas ao longo dos trechos de estrada demarcados
+            // Estacas ao longo dos trechos de estrada demarcados ainda não concluídos
             const roadStakeMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.6 });
             (infra.roadSegments || []).forEach(seg => {
                 if (seg.built) return;
@@ -223,7 +233,25 @@
                 seed: s,
                 centerX: 0,
                 centerZ: 0,
-                radius: MO.DIORAMA_R
+                radius: MO.DIORAMA_R,
+                discovered: true,
+                loaded: true
+            });
+
+            regionManager.registerRegion({
+                id: 'east-highlands',
+                name: 'Terras Altas do Leste',
+                biome: MO.BIOME_ORDER[(s + 1) % MO.BIOME_ORDER.length],
+                seed: s + 101,
+                centerX: 28,
+                centerZ: 0,
+                radius: MO.DIORAMA_R,
+                discovered: false,
+                loaded: false
+            });
+            regionManager.connectRegions('main-valley', 'east-highlands', {
+                portalLotId: 'lot-bridge',
+                label: 'Ponte Leste'
             });
 
             const lot1 = regionManager.registerLot({
@@ -332,6 +360,9 @@
 
         function archiveAndAdvanceToNextLot(forcedNextMode = null) {
             const archived = constructionManager.archiveActiveConstruction(regionManager);
+            if (((archived && archived.mode === 'bridge') || (MO.state.villageInfra && MO.state.villageInfra.bridgeUnlocked)) && regionManager.discoverRegion) {
+                regionManager.discoverRegion('east-highlands', true);
+            }
             const nextLot = getNextBuildableVillageLot();
             if (!nextLot) {
                 renderLotMarkers();
@@ -386,6 +417,26 @@
             return lights;
         }
 
+        function encodeSparseMap(arr) {
+            if (!arr) return [];
+            const out = [];
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i] > 0.02) out.push([i, Math.round(arr[i] * 100) / 100]);
+            }
+            return out;
+        }
+
+        function decodeSparseMap(arr, target) {
+            if (!Array.isArray(arr) || !target) return;
+            target.fill(0);
+            for (let i = 0; i < arr.length; i++) {
+                const pair = arr[i];
+                if (Array.isArray(pair) && pair[0] >= 0 && pair[0] < target.length) {
+                    target[pair[0]] = pair[1];
+                }
+            }
+        }
+
         function serialize() {
             const state = MO.state;
             return {
@@ -395,10 +446,31 @@
                 seed: state.seed,
                 biome: state.biome,
                 mode: state.mode,
+                activePhase: state.phase,
+                variant: state.variant,
                 timeOfDay: state.timeOfDay,
                 simTime: MO.simClock ? MO.simClock.simTime : 0,
                 villageInfra: { ...state.villageInfra },
                 workbench: { ...state.workbench },
+                levelMapSparse: encodeSparseMap(MO.levelMap),
+                roadMapSparse: encodeSparseMap(MO.roadMap),
+                campBuilt: state.camp ? {
+                    tents: (state.camp.tents || []).map(t => Boolean(t.built)),
+                    messHall: Boolean(state.camp.messHall && state.camp.messHall.built),
+                    floodlights: (state.camp.floodlights || []).map(f => Boolean(f.built))
+                } : null,
+                workers: (state.workers || []).map(w => ({
+                    kind: w.role === 'supervisor' ? 'supervisor' : 'helper',
+                    role: w.role,
+                    name: w.name,
+                    specialty: w.specialty,
+                    x: w.rig && w.rig.group ? Math.round(w.rig.group.position.x * 100) / 100 : MO.STATION_TOOLBOX.x,
+                    z: w.rig && w.rig.group ? Math.round(w.rig.group.position.z * 100) / 100 : MO.STATION_TOOLBOX.z,
+                    energy: Math.round((w.energy !== undefined ? w.energy : 100) * 10) / 10,
+                    hydration: Math.round((w.hydration !== undefined ? w.hydration : 100) * 10) / 10,
+                    hunger: Math.round((w.hunger !== undefined ? w.hunger : 100) * 10) / 10,
+                    statusText: w.statusText || ''
+                })),
                 regions: regionManager.serialize(),
                 constructions: constructionManager.serialize()
             };
@@ -415,6 +487,12 @@
             }
             if (snapshot.workbench && MO.state.workbench) {
                 Object.assign(MO.state.workbench, snapshot.workbench);
+            }
+            if (snapshot.levelMapSparse && MO.levelMap) {
+                decodeSparseMap(snapshot.levelMapSparse, MO.levelMap);
+            }
+            if (snapshot.roadMapSparse && MO.roadMap) {
+                decodeSparseMap(snapshot.roadMapSparse, MO.roadMap);
             }
             return true;
         }
@@ -450,13 +528,22 @@
                 const parsed = JSON.parse(raw);
                 if (!parsed || !parsed.constructions || !Array.isArray(parsed.constructions.constructions)) return false;
                 const hasCompleted = parsed.constructions.constructions.some(c => c.status === 'completed');
-                if (!hasCompleted) return false;
+                const hasInfraOrWorkers = Boolean(
+                    (parsed.villageInfra && (parsed.villageInfra.demarcated || parsed.villageInfra.roadBuilt))
+                    || (Array.isArray(parsed.workers) && parsed.workers.length > 0)
+                    || (parsed.activePhase > 0)
+                );
+                if (!hasCompleted && !hasInfraOrWorkers) return false;
 
                 const state = MO.state;
                 if (typeof parsed.seed === 'number') state.seed = parsed.seed;
                 if (parsed.biome && MO.BIOMES && MO.BIOMES[parsed.biome]) state.biome = parsed.biome;
                 if (typeof parsed.timeOfDay === 'number') state.timeOfDay = parsed.timeOfDay;
-                state.mode = 'house';
+                state.mode = parsed.mode || 'house';
+                state.workers = [];
+                if (MO.groups && MO.groups.workers && MO.resources) {
+                    MO.resources.clearGroup(MO.groups.workers);
+                }
 
                 MO.applyBiomeStyle(state.biome);
                 MO.levelMap.fill(0);
@@ -468,8 +555,12 @@
                 if (MO.rebuildCamp) MO.rebuildCamp();
 
                 restore(parsed);
+                MO.updateTerrainGeometry();
+
                 constructionManager.getCompletedConstructions().forEach(c => {
-                    if (c.mode === 'house' && constructionManager.rebuildArchivedHouseFromSnapshot) {
+                    if (constructionManager.rebuildArchivedFromSnapshot) {
+                        constructionManager.rebuildArchivedFromSnapshot(c, regionManager);
+                    } else if (c.mode === 'house' && constructionManager.rebuildArchivedHouseFromSnapshot) {
                         constructionManager.rebuildArchivedHouseFromSnapshot(c);
                     }
                 });
@@ -477,17 +568,61 @@
                 const activeLot = regionManager.getActiveLot();
                 const allDone = !activeLot || activeLot.status === 'completed';
                 state.villageCompleted = allDone;
-                state.mode = (activeLot && activeLot.allowedModes && activeLot.allowedModes[0]) || 'house';
+                state.mode = (activeLot && activeLot.allowedModes && activeLot.allowedModes[0]) || (parsed.mode || 'house');
 
                 if (MO.modes[state.mode] && MO.modes[state.mode].onInit) MO.modes[state.mode].onInit();
+                if (typeof parsed.activePhase === 'number' && !allDone && parsed.activePhase > 0) {
+                    state.phase = parsed.activePhase;
+                }
                 MO.populateBuildableLotWeeds();
-                if (allDone) {
+                if (allDone || state.phase > 0) {
                     state.weeds.forEach(w => { w.cleared = true; if (w.mesh) w.mesh.visible = false; });
                 }
+
+                if (parsed.campBuilt && state.camp) {
+                    (parsed.campBuilt.tents || []).forEach((built, i) => {
+                        const tn = state.camp.tents && state.camp.tents[i];
+                        if (tn && built) { tn.built = true; if (tn.builtMesh) tn.builtMesh.visible = true; if (tn.guideMesh) tn.guideMesh.visible = false; }
+                    });
+                    if (parsed.campBuilt.messHall && state.camp.messHall) {
+                        state.camp.messHall.built = true;
+                        if (state.camp.messHall.builtMesh) state.camp.messHall.builtMesh.visible = true;
+                        if (state.camp.messHall.guideMesh) state.camp.messHall.guideMesh.visible = false;
+                    }
+                    (parsed.campBuilt.floodlights || []).forEach((built, i) => {
+                        const fl = state.camp.floodlights && state.camp.floodlights[i];
+                        if (fl && built) { fl.built = true; if (fl.builtMesh) fl.builtMesh.visible = true; if (fl.guideMesh) fl.guideMesh.visible = false; }
+                    });
+                }
+
                 if (MO.initToolbox) MO.initToolbox();
                 if (MO.initWorkbench) MO.initWorkbench();
+                if (MO.setMixerBuilt && state.villageInfra) MO.setMixerBuilt(Boolean(state.villageInfra.mixerBuilt));
+                if (MO.setUnloadingBuilt && state.villageInfra) MO.setUnloadingBuilt(Boolean(state.villageInfra.unloadingBuilt));
+                if (MO.setStockYardsBuilt && state.villageInfra) MO.setStockYardsBuilt(Boolean(state.villageInfra.yardsBuilt));
+                if (MO.setWorkbenchBuilt && state.villageInfra) MO.setWorkbenchBuilt(Boolean(state.villageInfra.workbenchBuilt));
+
+                if (Array.isArray(parsed.workers) && MO.workerFactory && MO.workerFactory.hireWorker) {
+                    parsed.workers.forEach(ws => {
+                        const w = MO.workerFactory.hireWorker({
+                            kind: ws.kind,
+                            silent: true,
+                            profile: { name: ws.name, role: ws.role, specialty: ws.specialty }
+                        });
+                        if (w) {
+                            const ty = MO.getTerrainHeight ? MO.getTerrainHeight(ws.x, ws.z) : 0.28;
+                            if (w.rig && w.rig.group) w.rig.group.position.set(ws.x, ty, ws.z);
+                            if (typeof ws.energy === 'number') w.energy = ws.energy;
+                            if (typeof ws.hydration === 'number') w.hydration = ws.hydration;
+                            if (typeof ws.hunger === 'number') w.hunger = ws.hunger;
+                            if (ws.statusText) w.statusText = ws.statusText;
+                        }
+                    });
+                }
+
                 renderDemarcationLines();
                 renderLotMarkers();
+                if (MO.invalidateNavigationCache) MO.invalidateNavigationCache();
                 if (MO.syncPhaseUI) MO.syncPhaseUI();
                 if (MO.updateVillageUI) MO.updateVillageUI();
                 return true;

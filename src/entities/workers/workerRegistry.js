@@ -16,12 +16,12 @@
         { helmet: 0xe2e8f0, vest: 0x334155, name: 'Servente Léo', role: 'helper', specialty: 'earthwork', speed: 2.95 },
         { helmet: 0x38bdf8, vest: 0x0369a1, name: 'Carpinteiro Tito', role: 'carpenter', specialty: 'carpenter', speed: 2.90 },
         { helmet: 0xfbbf24, vest: 0x475569, name: 'Masseiro Caio', role: 'helper', specialty: 'logistics', speed: 3.00 },
-        { helmet: 0xa3e635, vest: 0x3f6212, name: 'Peão Duda', role: 'helper', specialty: 'earthwork', speed: 2.88 },
+        { helmet: 0xa3e635, vest: 0x3f6212, name: 'Jardineira Duda', role: 'gardener', specialty: 'gardener', speed: 2.88 },
         { helmet: 0xf97316, vest: 0x7c2d12, name: 'Pedreiro Chico', role: 'builder', specialty: 'mason', speed: 2.82 },
         { helmet: 0x2dd4bf, vest: 0x115e59, name: 'Carpinteiro Rui', role: 'carpenter', specialty: 'carpenter', speed: 2.92 },
-        { helmet: 0xf472b6, vest: 0x831843, name: 'Servente Nina', role: 'helper', specialty: 'logistics', speed: 3.05 },
-        { helmet: 0xc084fc, vest: 0x581c87, name: 'Peão Guga', role: 'builder', specialty: 'mason', speed: 2.86 },
-        { helmet: 0x60a5fa, vest: 0x1e3a8a, name: 'Servente Manu', role: 'helper', specialty: 'earthwork', speed: 2.98 }
+        { helmet: 0xf472b6, vest: 0x831843, name: 'Comerciante Nina', role: 'merchant', specialty: 'logistics', speed: 3.05 },
+        { helmet: 0xc084fc, vest: 0x581c87, name: 'Ferreiro Guga', role: 'smith', specialty: 'mason', speed: 2.86 },
+        { helmet: 0x60a5fa, vest: 0x1e3a8a, name: 'Moradora Manu', role: 'resident', specialty: 'resident', speed: 2.98 }
     ];
 
     MO.SUPERVISOR_PROFILE = SUPERVISOR_PROFILE;
@@ -326,12 +326,15 @@
             if (workers[i].role === 'supervisor') supervisors++;
             else helpers++;
         }
+        const maxSup = MO.MAX_SUPERVISORS || 1;
+        const maxHlp = MO.MAX_HELPERS || 10;
         return {
             supervisors,
             helpers,
             total: workers.length,
-            maxSupervisors: MO.MAX_SUPERVISORS || 1,
-            maxHelpers: MO.MAX_HELPERS || 10
+            maxSupervisors: maxSup,
+            maxHelpers: maxHlp,
+            maxTotal: maxSup + maxHlp
         };
     }
 
@@ -397,6 +400,7 @@
             energy: options.energy !== undefined ? options.energy : (95 - (idx % 4) * 5),
             hydration: options.hydration !== undefined ? options.hydration : (92 - (idx % 4) * 6),
             hunger: options.hunger !== undefined ? options.hunger : (90 - (idx % 4) * 7),
+            socialCooldown: 0,
             sleepingInside: false,
             statusText: profile.role === 'supervisor' ? 'Analisando o terreno' : 'Aguardando na Caixa de Ferramentas'
         };
@@ -406,7 +410,7 @@
         const counts = getNpcCounts();
         const npcBtnLbl = document.getElementById('npc-btn-label');
         if (npcBtnLbl) {
-            npcBtnLbl.textContent = `NPCs (${counts.total}/${counts.maxTotal})`;
+            npcBtnLbl.textContent = String(counts.total);
         }
         const lbl = document.getElementById('worker-btn-label');
         if (lbl) {
@@ -432,6 +436,7 @@
         if (MO.groups && MO.groups.workers) MO.groups.workers.add(worker.rig.group);
         state.workers.push(worker);
         syncNpcUI();
+        if ((!options.silent || options.free) && MO.cityManager && MO.cityManager.saveCityState) MO.cityManager.saveCityState();
         if (!options.silent) {
             if (MO.SoundFX && MO.SoundFX.playHammerWood) MO.SoundFX.playHammerWood();
             if (MO.showToast) MO.showToast(`${worker.name} chegou para demarcar estradas e estações!`, '📋');
@@ -455,6 +460,7 @@
         if (MO.groups && MO.groups.workers) MO.groups.workers.add(worker.rig.group);
         state.workers.push(worker);
         syncNpcUI();
+        if ((!options.silent || options.free) && MO.cityManager && MO.cityManager.saveCityState) MO.cityManager.saveCityState();
         if (!options.silent) {
             if (MO.SoundFX && MO.SoundFX.playHammerWood) MO.SoundFX.playHammerWood();
             if (MO.showToast) MO.showToast(`${worker.name} (${worker.specialty}) entrou no canteiro!`, '👷');
@@ -467,6 +473,40 @@
             return hireSupervisor(options);
         }
         return hireHelper(options);
+    }
+
+    const CITY_PROFESSIONS = {
+        builder: { label: 'Construtor', helmet: 0xfacc15, vest: 0xd97706, role: 'builder', specialty: 'mason', speed: 2.9 },
+        lumberjack: { label: 'Lenhador', helmet: 0xef4444, vest: 0x7f1d1d, role: 'lumberjack', specialty: 'lumberjack', speed: 2.95 },
+        miner: { label: 'Mineiro', helmet: 0x94a3b8, vest: 0x1e293b, role: 'miner', specialty: 'miner', speed: 2.85 },
+        farmer: { label: 'Fazendeiro', helmet: 0xa3e635, vest: 0x365314, role: 'farmer', specialty: 'farmer', speed: 2.85 },
+        merchant: { label: 'Comerciante', helmet: 0xc084fc, vest: 0x581c87, role: 'merchant', specialty: 'merchant', speed: 3.1 }
+    };
+    MO.CITY_PROFESSIONS = CITY_PROFESSIONS;
+
+    let specialistSeq = 1;
+    function hireSpecialist(profId = 'builder', options = {}) {
+        const prof = CITY_PROFESSIONS[profId] || CITY_PROFESSIONS.builder;
+        const cost = (MO.cityManager && MO.cityManager.PROF_HIRE_COST) ? MO.cityManager.PROF_HIRE_COST[profId] : null;
+        if (!options.free && MO.cityManager && cost && !MO.cityManager.spendResources(cost)) {
+            if (!options.silent && MO.showToast) {
+                MO.showToast(`Sem moedas/comida para contratar ${prof.label}!`, '⚠️');
+            }
+            return null;
+        }
+        const worker = hireHelper({
+            ...options,
+            maxHelpers: options.maxHelpers !== undefined ? options.maxHelpers : 40,
+            profile: {
+                name: `${prof.label} #${specialistSeq++}`,
+                role: prof.role,
+                specialty: prof.specialty,
+                helmet: prof.helmet,
+                vest: prof.vest,
+                speed: prof.speed
+            }
+        });
+        return worker;
     }
 
     function hireCrew(helperCount = 4, includeSupervisor = true) {
@@ -490,6 +530,7 @@
         hireSupervisor,
         hireHelper,
         hireWorker,
+        hireSpecialist,
         hireCrew,
         getNpcCounts,
         syncNpcUI,

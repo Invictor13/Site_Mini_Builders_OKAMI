@@ -137,7 +137,13 @@ function bootApp() {
     for (const rel of scriptMatches) {
         vm.runInContext(fs.readFileSync(path.join(rootDir, rel), 'utf8'), ctx, { filename: rel });
     }
-    return windowObj.MO;
+    const MO = windowObj.MO;
+    MO.state.cityMode = false;
+    MO.state.city.playerDriven = false;
+    MO.state.workers = [];
+    MO.resources.clearGroup(MO.groups.workers);
+    MO.rebuildCamp(false);
+    return MO;
 }
 
 test('módulos de NPC expõem API completa e aplicam limite de 1 Supervisor e até 10 Ajudantes', () => {
@@ -244,4 +250,31 @@ test('workerTasks.releaseTaskReservations libera todos os recursos reservados', 
     assert.equal(wall.mepBusy, false);
     assert.equal(brick.res, false);
     assert.equal(MO.state.roofWorkerBusy, false);
+});
+
+test('P2.0/P2.1: rotinas sociais e microeventos emergentes conectam NPCs próximos', () => {
+    const MO = bootApp();
+    const w1 = MO.hireHelper({ silent: true });
+    const w2 = MO.hireHelper({ silent: true });
+    MO.state.camp.floodlights.forEach(fl => { fl.built = true; });
+    if (MO.state.camp.messHall) MO.state.camp.messHall.built = true;
+    MO.state.camp.tents.forEach(tn => { tn.built = true; });
+    w1.rig.group.position.set(-5.0, 0.3, -1.0);
+    w2.rig.group.position.set(-4.0, 0.3, -1.0);
+    w1.socialCooldown = 0;
+
+    // P2.0: interação social quando ociosos próximos
+    const chatAssigned = MO.workerNeeds.assignCampOrLifeTask(
+        w1, MO.workerTasks.setDestination, MO.workerFactory.setWorkerTool, 2.0, true
+    );
+    assert.equal(chatAssigned, true);
+    assert.equal(w1.task.type, 'social-chat');
+    assert.ok(w1.socialCooldown > 0);
+
+    // P2.1: microevento com 2 trabalhadores ativos
+    w1.task = { type: 'weed', duration: 2.0, subPhase: 'work' };
+    w2.task = { type: 'weed', duration: 2.0, subPhase: 'work' };
+    MO.state.events.microTimer = 0.01;
+    MO.updateMicroEvents(0.05, 10.0);
+    assert.ok(MO.state.events.microLog.length >= 1, 'Microevento deve ser registrado no log');
 });

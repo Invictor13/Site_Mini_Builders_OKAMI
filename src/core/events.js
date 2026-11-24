@@ -58,6 +58,52 @@
         );
     };
 
+    // Microeventos emergentes sutis que dão personalidade à vila (P2.1)
+    MO.updateMicroEvents = function(dt, t) {
+        const state = MO.state;
+        if (!state || !state.events || !Array.isArray(state.workers) || state.workers.length < 2) return;
+
+        state.events.microTimer = (state.events.microTimer !== undefined ? state.events.microTimer : 12) - dt;
+        if (state.events.microTimer > 0) return;
+        state.events.microTimer = 18 + Math.random() * 14;
+
+        const workingPeers = state.workers.filter(w => !w.sleepingInside && w.task && w.task.subPhase === 'work');
+        if (workingPeers.length < 2) return;
+
+        const roll = Math.random();
+        const w = workingPeers[Math.floor(Math.random() * workingPeers.length)];
+        const pos = w.rig && w.rig.group ? w.rig.group.position : { x: 0, y: 0.3, z: 0 };
+
+        if (roll < 0.55) {
+            // Microevento: ferramenta escorregou e colega próximo oferece ajuda rápida
+            const nearby = workingPeers.find(o => {
+                if (o === w || !o.rig || !o.rig.group) return false;
+                return Math.hypot(o.rig.group.position.x - pos.x, o.rig.group.position.z - pos.z) < 6.0;
+            });
+            MO.spawnBurst(pos.x, pos.y + 0.35, pos.z, 0xfbbf24, 5, 0.06);
+            if (MO.SoundFX && MO.SoundFX.playHammerWood) MO.SoundFX.playHammerWood();
+            state.events.microLog.push({ type: 'drop-tool', worker: w.name, time: t || 0 });
+            if (state.events.microLog.length > 10) state.events.microLog.shift();
+
+            if (nearby && (!nearby.task || (nearby.task.type !== 'assist-peer' && !nearby.task.col))) {
+                if (MO.workerTasks && MO.workerTasks.releaseTaskReservations && nearby.task) {
+                    MO.workerTasks.releaseTaskReservations(nearby.task);
+                }
+                nearby.task = { type: 'assist-peer', peer: w, duration: 1.1, subPhase: 'work' };
+                if (MO.workerTasks && MO.workerTasks.setDestination) {
+                    MO.workerTasks.setDestination(nearby, pos.x + 0.6, pos.z + 0.4);
+                }
+                nearby.rig.setBadge('🤝');
+                nearby.statusText = `Ajudando ${w.name}`;
+            }
+        } else {
+            // Saudação amigável / inspeção rápida no canteiro
+            w.rig.setBadge('👋');
+            state.events.microLog.push({ type: 'wave', worker: w.name, time: t || 0 });
+            if (state.events.microLog.length > 10) state.events.microLog.shift();
+        }
+    };
+
     // Dispara imprevistos aleatórios ao longo da obra (apenas no perfil Realista)
     MO.updateRandomEvents = function(dt) {
         const state = MO.state;

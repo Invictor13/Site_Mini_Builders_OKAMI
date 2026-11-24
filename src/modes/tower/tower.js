@@ -217,7 +217,10 @@
         tier.hasSteel = true; tier.res = false;
         tier.steelGrp.visible = true;
         tier.scafGrp.visible = false;
-        if (MO.spawnWeldSparks) MO.spawnWeldSparks(0, tier.y0 + tier.tierH, TOWER_Z);
+        const tw = MO.state.tower || {};
+        const ox = tw.originX !== undefined ? tw.originX : 0;
+        const oz = tw.originZ !== undefined ? tw.originZ : -0.3;
+        if (MO.spawnWeldSparks) MO.spawnWeldSparks(ox, tier.y0 + tier.tierH, oz);
         else MO.SoundFX.playMetalClang();
     }
 
@@ -422,4 +425,12 @@
     MO.advanceTowerPhase3 = MO.advanceTowerPhase3;
     MO.runTowerWindTest = MO.runTowerWindTest;
     MO.installTowerTop = installTowerTop;
+    MO.towerHelpers = {
+        digTowerFooting,
+        rebarTowerFooting,
+        concreteTowerFooting,
+        installTierScaffold,
+        installTierSteel,
+        installTowerTop
+    };
 })(window.MO = window.MO || {});

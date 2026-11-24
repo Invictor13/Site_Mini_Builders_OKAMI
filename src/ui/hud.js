@@ -22,6 +22,18 @@
         const state = MO.state;
         const mode = state.mode;
 
+        // No modo Cidade, as obras progridem 100% automático pelos trabalhadores;
+        // o dock manual de ferramentas só aparece fora do cityMode (ou se manualPhaseDock for ativado).
+        const activeConstr = (MO.constructionManager && MO.constructionManager.getActiveConstruction)
+            ? MO.constructionManager.getActiveConstruction()
+            : null;
+        const phaseWrap = document.getElementById('phase-dock-wrap');
+        if (phaseWrap) {
+            const allowManualDock = Boolean(state.city && state.city.manualPhaseDock);
+            const showPhaseDock = !state.cityMode || (allowManualDock && Boolean(activeConstr));
+            phaseWrap.classList.toggle('hidden', !showPhaseDock);
+        }
+
         // Oculta todos os docks e exibe apenas o dock correspondente ao modo e fase atual
         document.querySelectorAll('[data-mode-dock]').forEach(el => {
             const m = el.getAttribute('data-mode-dock');
@@ -84,7 +96,11 @@
         const lotTag = activeLot ? ` · ${activeLot.label.toUpperCase()}` : '';
         const ind = document.getElementById('phase-indicator');
         if (ind) {
-            ind.textContent = `${modeLabels[mode]} · FASE ${state.phase} · ${pName}${lotTag} · ${biomeLabel} #${state.seed}`;
+            if (state.cityMode && !activeConstr) {
+                ind.textContent = `CIDADE LIVRE · ${biomeLabel} #${state.seed}`;
+            } else {
+                ind.textContent = `${modeLabels[mode]} · FASE ${state.phase} · ${pName}${lotTag} · ${biomeLabel} #${state.seed}`;
+            }
         }
         if (MO.updateVillageUI) MO.updateVillageUI();
         if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
@@ -116,13 +132,179 @@
     MO.toggleNpcPanel = function(forceVal) {
         const panel = document.getElementById('npc-panel');
         const btn = document.getElementById('btn-npc-menu');
+        const optPanel = document.getElementById('options-panel');
+        const optBtn = document.getElementById('btn-options-menu');
+        const phonePanel = document.getElementById('phone-panel');
+        const phoneBtn = document.getElementById('btn-phone-menu');
         if (!panel) return false;
         const isHidden = panel.classList.contains('hidden');
         const nextOpen = (typeof forceVal === 'boolean') ? forceVal : isHidden;
         panel.classList.toggle('hidden', !nextOpen);
         if (btn) btn.classList.toggle('active', nextOpen);
+        if (nextOpen && optPanel) {
+            optPanel.classList.add('hidden');
+            if (optBtn) optBtn.classList.remove('active');
+        }
+        if (nextOpen && phonePanel) {
+            phonePanel.classList.add('hidden');
+            if (phoneBtn) phoneBtn.classList.remove('active');
+        }
         if (nextOpen && MO.renderNpcRosterUI) MO.renderNpcRosterUI();
         return nextOpen;
+    };
+
+    MO.toggleOptionsPanel = function(forceVal) {
+        const panel = document.getElementById('options-panel');
+        const btn = document.getElementById('btn-options-menu');
+        const npcPanel = document.getElementById('npc-panel');
+        const npcBtn = document.getElementById('btn-npc-menu');
+        const phonePanel = document.getElementById('phone-panel');
+        const phoneBtn = document.getElementById('btn-phone-menu');
+        if (!panel) return false;
+        const isHidden = panel.classList.contains('hidden');
+        const nextOpen = (typeof forceVal === 'boolean') ? forceVal : isHidden;
+        panel.classList.toggle('hidden', !nextOpen);
+        if (btn) btn.classList.toggle('active', nextOpen);
+        if (nextOpen && npcPanel) {
+            npcPanel.classList.add('hidden');
+            if (npcBtn) npcBtn.classList.remove('active');
+        }
+        if (nextOpen && phonePanel) {
+            phonePanel.classList.add('hidden');
+            if (phoneBtn) phoneBtn.classList.remove('active');
+        }
+        return nextOpen;
+    };
+
+    MO.togglePhonePanel = function(forceVal) {
+        const panel = document.getElementById('phone-panel');
+        const btn = document.getElementById('btn-phone-menu');
+        const npcPanel = document.getElementById('npc-panel');
+        const npcBtn = document.getElementById('btn-npc-menu');
+        const optPanel = document.getElementById('options-panel');
+        const optBtn = document.getElementById('btn-options-menu');
+        if (!panel) return false;
+        const isHidden = panel.classList.contains('hidden');
+        const nextOpen = (typeof forceVal === 'boolean') ? forceVal : isHidden;
+        panel.classList.toggle('hidden', !nextOpen);
+        if (btn) btn.classList.toggle('active', nextOpen);
+        if (nextOpen && npcPanel) {
+            npcPanel.classList.add('hidden');
+            if (npcBtn) npcBtn.classList.remove('active');
+        }
+        if (nextOpen && optPanel) {
+            optPanel.classList.add('hidden');
+            if (optBtn) optBtn.classList.remove('active');
+        }
+        const stEl = document.getElementById('phone-truck-status');
+        if (stEl && MO.state && MO.state.villageInfra) {
+            const hasBay = MO.state.villageInfra.unloadingBuilt;
+            const hasRoute = hasBay && MO.computeRoadRouteToUnload && MO.computeRoadRouteToUnload(MO.STATION_UNLOAD) !== null;
+            stEl.textContent = !hasBay
+                ? 'Coloque uma Baia'
+                : (hasRoute ? 'Via + Baia prontas ✓' : 'Conecte estrada na Baia');
+        }
+        return nextOpen;
+    };
+
+    MO.callTruckFromPhone = function(cargoKind = 'mixed') {
+        if (MO.requestSupplyTruck) MO.requestSupplyTruck(cargoKind, true);
+        const stEl = document.getElementById('phone-truck-status');
+        if (stEl && MO.state && MO.state.site) {
+            const hasBay = MO.state.villageInfra && MO.state.villageInfra.unloadingBuilt;
+            const hasRoute = hasBay && MO.computeRoadRouteToUnload && MO.computeRoadRouteToUnload(MO.STATION_UNLOAD) !== null;
+            stEl.textContent = MO.state.site.truckActive
+                ? 'Caminhão na estrada 🚚'
+                : (!hasBay ? 'Coloque uma Baia' : (hasRoute ? 'Via + Baia prontas ✓' : 'Conecte estrada na Baia'));
+        }
+    };
+
+    MO.openCitySetupModal = function() {
+        MO.toggleOptionsPanel(false);
+        MO.showTitleView('home');
+        MO.refreshTitleMenuUI();
+        const modal = document.getElementById('city-setup-modal');
+        if (modal) modal.classList.remove('hidden');
+    };
+
+    MO.showTitleView = function(view = 'home') {
+        const home = document.getElementById('title-home-view');
+        const nw = document.getElementById('title-new-view');
+        const cfg = document.getElementById('title-settings-view');
+        if (home) home.classList.toggle('hidden', view !== 'home');
+        if (nw) nw.classList.toggle('hidden', view !== 'new');
+        if (cfg) cfg.classList.toggle('hidden', view !== 'settings');
+    };
+
+    MO.selectSetupGameMode = function(modeId = 'real') {
+        const isSandbox = (modeId === 'sandbox');
+        const sb = document.getElementById('setup-sandbox');
+        if (sb) sb.checked = isSandbox;
+        if (typeof document !== 'undefined') {
+            document.querySelectorAll('[data-mode-card]').forEach(el => {
+                const active = el.getAttribute('data-mode-card') === modeId;
+                el.classList.toggle('border-2', active);
+                el.classList.toggle('border-emerald-400', active);
+                el.classList.toggle('bg-emerald-500/15', active);
+                el.classList.toggle('border-white/15', !active);
+                el.classList.toggle('bg-white/5', !active);
+            });
+        }
+    };
+
+    MO.refreshTitleMenuUI = function() {
+        const btn = document.getElementById('btn-continue-city');
+        const meta = document.getElementById('continue-city-meta');
+        if (!btn || !meta) return;
+        const summary = MO.cityManager && MO.cityManager.getSavedCitySummary
+            ? MO.cityManager.getSavedCitySummary()
+            : null;
+        btn.disabled = !summary;
+        if (summary) {
+            meta.textContent = `${summary.supervisorName} · #${summary.seed} · ${summary.workers} NPCs`;
+        } else {
+            meta.textContent = 'Nenhuma cidade salva';
+        }
+    };
+
+    MO.continueCityFromMenu = function() {
+        if (MO.cityManager && MO.cityManager.continueCityGame && MO.cityManager.continueCityGame()) {
+            const modal = document.getElementById('city-setup-modal');
+            if (modal) modal.classList.add('hidden');
+            if (MO.clearCitySelection) MO.clearCitySelection();
+            if (MO.syncPhaseUI) MO.syncPhaseUI();
+            if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
+            return true;
+        }
+        return false;
+    };
+
+    MO.toggleCityCategory = function(cat) {
+        const city = MO.state && MO.state.city;
+        const pal = document.getElementById('city-build-palette');
+        if (!city || !pal) return null;
+        const nextCat = (city.activeCategory === cat) ? null : cat;
+        city.activeCategory = nextCat;
+        pal.classList.toggle('hidden', !nextCat);
+        document.querySelectorAll('[data-cat-group]').forEach(g => {
+            g.classList.toggle('hidden', g.getAttribute('data-cat-group') !== nextCat);
+        });
+        document.querySelectorAll('[data-cat-btn]').forEach(b => {
+            b.classList.toggle('active', b.getAttribute('data-cat-btn') === nextCat);
+        });
+        return nextCat;
+    };
+
+    MO.clearCitySelection = function() {
+        const city = MO.state && MO.state.city;
+        if (city) {
+            city.activeCategory = null;
+            if (MO.cityManager) MO.cityManager.setActiveBuildTool(null);
+        }
+        const pal = document.getElementById('city-build-palette');
+        if (pal) pal.classList.add('hidden');
+        document.querySelectorAll('[data-cat-btn]').forEach(b => b.classList.remove('active'));
+        if (MO.placementGhost) MO.placementGhost.visible = false;
     };
 
     MO.renderNpcRosterUI = function() {
@@ -141,17 +323,70 @@
         if (!rosterEl || !state) return;
         const workers = state.workers || [];
         if (workers.length === 0) {
-            rosterEl.innerHTML = '<div class="text-slate-400 text-[11px] py-1">Nenhum NPC no mapa ainda. Contrate um Supervisor primeiro!</div>';
+            rosterEl.innerHTML = '<div class="text-slate-400 text-[11px] py-1">Nenhum NPC no mapa ainda. Use o 📱 Celular no canto direito para contratar!</div>';
             return;
         }
+        const roleIcons = {
+            supervisor: '👷‍♂️',
+            lumberjack: '🪓',
+            miner: '⛏️',
+            farmer: '🌾',
+            merchant: '🪙',
+            builder: '🧱',
+            carpenter: '🪚',
+            helper: '👷'
+        };
         rosterEl.innerHTML = workers.map(w => {
-            const badge = w.role === 'supervisor' ? '👷‍♂️ Supervisor' : `👷 ${w.name}`;
+            const ico = roleIcons[w.role] || '👷';
             const status = w.statusText || 'Disponível';
-            return `<div class="flex items-center justify-between gap-2 bg-white/5 rounded-lg px-2 py-1 text-[11px]">
-                <span class="font-medium text-slate-100 shrink-0">${badge}</span>
-                <span class="text-slate-300 truncate">${status}</span>
+            const en = Math.round(w.energy !== undefined ? w.energy : 100);
+            const hy = Math.round(w.hydration !== undefined ? w.hydration : 100);
+            const hu = Math.round(w.hunger !== undefined ? w.hunger : 100);
+            return `<div class="bg-white/5 rounded-xl px-2.5 py-1.5 text-[11px] space-y-0.5 border border-white/5">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-semibold text-slate-100 shrink-0">${ico} ${w.name}</span>
+                    <span class="text-[10px] text-slate-400">⚡${en}% 💧${hy}% 🍲${hu}%</span>
+                </div>
+                <div class="text-[10px] text-slate-300 truncate">${status}</div>
             </div>`;
         }).join('');
+    };
+
+    MO.setCityBuildTool = function(toolId) {
+        if (MO.cityManager) return MO.cityManager.setActiveBuildTool(toolId);
+        return null;
+    };
+
+    MO.toggleSandboxMode = function(forceVal) {
+        if (MO.cityManager) return MO.cityManager.toggleSandboxMode(forceVal);
+        return false;
+    };
+
+    MO.toggleCityPalette = function(forceVal) {
+        const pal = document.getElementById('city-build-palette');
+        const btn = document.getElementById('btn-city-build-toggle');
+        if (!pal) return false;
+        const nextOpen = (typeof forceVal === 'boolean') ? forceVal : pal.classList.contains('hidden');
+        pal.classList.toggle('hidden', !nextOpen);
+        if (btn) btn.classList.toggle('active', nextOpen);
+        return nextOpen;
+    };
+
+    MO.startCityFromMenu = function() {
+        const nameEl = document.getElementById('setup-sup-name');
+        const seedEl = document.getElementById('setup-seed');
+        const biomeEl = document.getElementById('setup-biome');
+        const sbEl = document.getElementById('setup-sandbox');
+        const supName = nameEl && nameEl.value ? nameEl.value.trim() : 'Supervisor Beto';
+        const seed = seedEl && seedEl.value ? Number(seedEl.value) : MO.state.seed;
+        const biome = biomeEl && biomeEl.value ? biomeEl.value : MO.state.biome;
+        const sandboxMode = sbEl ? Boolean(sbEl.checked) : false;
+        if (MO.cityManager) {
+            MO.cityManager.startCityGame({ supervisorName: supName, seed, biome, sandboxMode });
+        }
+        if (MO.clearCitySelection) MO.clearCitySelection();
+        if (MO.syncPhaseUI) MO.syncPhaseUI();
+        if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
     };
 
     MO.selectTool = function(tool) {

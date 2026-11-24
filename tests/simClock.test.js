@@ -299,3 +299,24 @@ test('alternância entre Casa, Ponte, Prédio e Torre e pausa longa mantêm o mo
 
     assert.ok(MO.simClock.stepCount >= 120);
 });
+
+test('MO.simClock mantém precisão exata em 1x, 2x e 4x para 30, 60 e 120 FPS sem descarte indevido', () => {
+    const MO = loadSimClockModule();
+    for (const scale of [1, 2, 4]) {
+        for (const fps of [30, 60, 120]) {
+            const clock = MO.createSimulationClock();
+            clock.timeScale = scale;
+            const totalFrames = fps * 2; // 2 segundos de parede
+            const frameDt = 1 / fps;
+            for (let i = 0; i < totalFrames; i++) {
+                clock.advance(frameDt);
+            }
+            const expectedSimTime = 2.0 * scale;
+            assert.ok(
+                Math.abs(clock.simTime - expectedSimTime) <= (1 / 60) + 1e-6,
+                `scale=${scale}x fps=${fps} deveria atingir ~${expectedSimTime}s (obtido: ${clock.simTime}s)`
+            );
+            assert.equal(clock.stepCount, 120 * scale);
+        }
+    }
+});

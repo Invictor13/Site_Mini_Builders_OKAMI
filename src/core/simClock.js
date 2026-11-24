@@ -46,12 +46,17 @@
                     return 0;
                 }
 
-                const clampedDt = Math.min(this.maxFrameDt, validDt) * this.timeScale;
+                const clampedFrameDt = Math.min(this.maxFrameDt, validDt);
+                const clampedDt = clampedFrameDt * this.timeScale;
                 this.lastClampedDt = clampedDt;
                 this.accumulator += clampedDt;
 
+                const effectiveMaxSteps = Math.max(
+                    this.maxStepsPerFrame,
+                    Math.ceil(this.maxStepsPerFrame * Math.max(1, this.timeScale))
+                );
                 let steps = 0;
-                while (this.accumulator + EPSILON >= this.fixedDt && steps < this.maxStepsPerFrame) {
+                while (this.accumulator + EPSILON >= this.fixedDt && steps < effectiveMaxSteps) {
                     this.accumulator = Math.max(0, this.accumulator - this.fixedDt);
                     this.stepCount += 1;
                     this.simTime = this.stepCount * this.fixedDt;
@@ -63,7 +68,7 @@
 
                 // Se atingiu o teto de passos por frame (ex.: aba retornou de pausa longa),
                 // descarta o excesso do acumulador para impedir saltos acumulados.
-                if (steps >= this.maxStepsPerFrame && this.accumulator >= this.fixedDt) {
+                if (steps >= effectiveMaxSteps && this.accumulator >= this.fixedDt) {
                     this.accumulator = this.fixedDt * 0.999;
                 }
 
