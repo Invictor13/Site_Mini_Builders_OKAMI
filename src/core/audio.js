@@ -98,6 +98,275 @@
             src.connect(f); f.connect(g); g.connect(ctx.destination);
             src.start();
         },
+        playAxeChop() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(210 + Math.random() * 45, now);
+            osc.frequency.exponentialRampToValueAtTime(55, now + 0.09);
+            g.gain.setValueAtTime(0.22, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.10);
+
+            const len = Math.floor(ctx.sampleRate * 0.05);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.25));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 1100;
+            const ng = ctx.createGain(); ng.gain.value = 0.14;
+            src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+            src.start(now);
+        },
+        playTreeCreak() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(95, now);
+            osc.frequency.linearRampToValueAtTime(62, now + 0.45);
+            const f = ctx.createBiquadFilter();
+            f.type = 'lowpass'; f.frequency.value = 340;
+            g.gain.setValueAtTime(0.07, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+            osc.connect(f); f.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.48);
+        },
+        playTreeCrash() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(90, now);
+            osc.frequency.exponentialRampToValueAtTime(28, now + 0.32);
+            g.gain.setValueAtTime(0.28, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.35);
+
+            const len = Math.floor(ctx.sampleRate * 0.26);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.35));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'lowpass'; f.frequency.value = 650;
+            const ng = ctx.createGain(); ng.gain.value = 0.18;
+            src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+            src.start(now);
+        },
+        playPlantDig() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const len = Math.floor(ctx.sampleRate * 0.12);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.4));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'lowpass'; f.frequency.value = 480;
+            const g = ctx.createGain(); g.gain.value = 0.15;
+            src.connect(f); f.connect(g); g.connect(ctx.destination);
+            src.start(now);
+        },
+        playCashRegister() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            [880, 1320].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                g.gain.setValueAtTime(0.12, now + idx * 0.08);
+                g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.22);
+                osc.connect(g); g.connect(ctx.destination);
+                osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.22);
+            });
+        },
+        playPickaxeClink() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(1150 + Math.random() * 280, now);
+            osc.frequency.exponentialRampToValueAtTime(380, now + 0.09);
+            g.gain.setValueAtTime(0.15, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.11);
+
+            const len = Math.floor(ctx.sampleRate * 0.06);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.25));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'highpass'; f.frequency.value = 1400;
+            const ng = ctx.createGain(); ng.gain.value = 0.12;
+            src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+            src.start(now);
+        },
+        playRockShatter() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(110, now);
+            osc.frequency.exponentialRampToValueAtTime(30, now + 0.32);
+            g.gain.setValueAtTime(0.30, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.34);
+
+            const len = Math.floor(ctx.sampleRate * 0.26);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.38));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 620;
+            const ng = ctx.createGain(); ng.gain.value = 0.18;
+            src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+            src.start(now);
+        },
+        playStoneGrind() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const len = Math.floor(ctx.sampleRate * 0.15);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin((i / len) * Math.PI);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 1850; f.Q.value = 3.0;
+            const g = ctx.createGain(); g.gain.value = 0.10;
+            src.connect(f); f.connect(g); g.connect(ctx.destination);
+            src.start(now);
+        },
+        playStonePlace() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(240, now);
+            osc.frequency.exponentialRampToValueAtTime(75, now + 0.10);
+            g.gain.setValueAtTime(0.18, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.12);
+        },
+        playShovelScrape() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const len = Math.floor(ctx.sampleRate * 0.12);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.45));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'lowpass'; f.frequency.value = 720;
+            const g = ctx.createGain(); g.gain.value = 0.14;
+            src.connect(f); f.connect(g); g.connect(ctx.destination);
+            src.start(now);
+        },
+        playHoeTill() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(160, now);
+            osc.frequency.exponentialRampToValueAtTime(48, now + 0.11);
+            g.gain.setValueAtTime(0.18, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.12);
+
+            const len = Math.floor(ctx.sampleRate * 0.08);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.35));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'lowpass'; f.frequency.value = 540;
+            const ng = ctx.createGain(); ng.gain.value = 0.14;
+            src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+            src.start(now);
+        },
+        playWaterPour() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const len = Math.floor(ctx.sampleRate * 0.28);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin((i / len) * Math.PI);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 920; f.Q.value = 1.4;
+            const g = ctx.createGain(); g.gain.value = 0.12;
+            src.connect(f); f.connect(g); g.connect(ctx.destination);
+            src.start(now);
+        },
+        playSickleCut() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const len = Math.floor(ctx.sampleRate * 0.12);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.28));
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'highpass'; f.frequency.value = 1800;
+            const g = ctx.createGain(); g.gain.value = 0.13;
+            src.connect(f); f.connect(g); g.connect(ctx.destination);
+            src.start(now);
+        },
+        playPackCrate() {
+            if (!this.canPlay()) return;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(280, now);
+            osc.frequency.exponentialRampToValueAtTime(110, now + 0.08);
+            g.gain.setValueAtTime(0.15, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(now); osc.stop(now + 0.09);
+        },
         playMetalClang() {
             if (!this.canPlay()) return;
             const ctx = getAudioCtx();

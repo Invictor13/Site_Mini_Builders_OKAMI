@@ -168,6 +168,7 @@
             if (e.button === 2 || e.button === 1) {
                 camOrbit.isDragging = true;
                 camOrbit.isPanning = (e.button === 1 || e.shiftKey);
+                if (camOrbit.isPanning && MO.stopFollowingWorker) MO.stopFollowingWorker();
                 camOrbit.prevX = e.clientX;
                 camOrbit.prevY = e.clientY;
                 return;
@@ -201,8 +202,11 @@
                 if (obj && obj.userData && obj.userData.interactiveKind === 'worker') {
                     const w = state.workers.find(item => item.id === obj.userData.workerId);
                     if (w) {
+                        const traitStr = w.traitLabel ? ` · ${w.traitIcon || '✨'}${w.traitLabel}` : '';
+                        const lastMem = (w.memory && w.memory.recentEvents && w.memory.recentEvents[0]) ? ` · 📖 ${w.memory.recentEvents[0]}` : '';
+                        if (MO.followWorker) MO.followWorker(w.id);
                         MO.showToast(
-                            `${w.name}: ${w.statusText} · ⚡${Math.round(w.energy)}% · 💧${Math.round(w.hydration)}% · 🍲${Math.round(w.hunger)}%`,
+                            `${w.name} (Nv.${w.level || 1}${traitStr}): ${w.statusText}${lastMem}`,
                             '👷'
                         );
                         return;
@@ -254,6 +258,21 @@
             if (state.city && state.city.activeBuildTool && MO.cityManager) {
                 const thCity = intersectTerrain(raycaster);
                 if (thCity.length > 0 && MO.cityManager.handlePlacementPointerDown(thCity[0].point)) {
+                    return;
+                }
+            }
+
+            // --- INTERAÇÃO DIRETA FLORESTAL & PEDREIRA (Árvores, Toras, Rochas, Britador, Madeireira, Fundição) ---
+            if (state.cityMode) {
+                const thWorld = intersectTerrain(raycaster);
+                const tPt = thWorld.length > 0 ? thWorld[0].point : null;
+                if (MO.forestryManager && MO.forestryManager.handleWorldClick && MO.forestryManager.handleWorldClick(raycaster, tPt)) {
+                    return;
+                }
+                if (MO.miningManager && MO.miningManager.handleWorldClick && MO.miningManager.handleWorldClick(raycaster, tPt)) {
+                    return;
+                }
+                if (MO.farmingManager && MO.farmingManager.handleWorldClick && MO.farmingManager.handleWorldClick(raycaster)) {
                     return;
                 }
             }

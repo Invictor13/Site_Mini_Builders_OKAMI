@@ -48,6 +48,7 @@
         cinemaTour: false,
         cinemaTimer: 0,
         cinemaIdx: 0,
+        followWorkerId: null,
         playlist: true,
         zenMode: false,
         muted: false,              // Mudo para efeitos da obra (martelo, pá, etc.)
@@ -240,6 +241,8 @@
         city: {
             playerDriven: true,
             setupConfirmed: false,
+            chilloutMode: false,   // Modo Chillout: construção automática progressiva das estradas às casas
+            chilloutStage: '',
             activeCategory: null,  // 'roads' | 'support' | 'city' | 'economy' | null
             activeBuildTool: null, // 'dirt-road' | 'paved-street' | 'unloading' | 'mixer' | 'workbench' | 'mess-hall' | 'tent' | 'floodlight' | 'stockyard' | 'house-auto' | 'house-custom' | 'bridge' | 'building' | 'tower' | 'farm' | 'lumberyard' | 'mine' | 'market'
             roadTiles: new Map(),  // key "gx,gz" -> { gx, gz, kind: 'dirt'|'paved', built: boolean }

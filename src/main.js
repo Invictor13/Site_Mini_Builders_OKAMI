@@ -48,8 +48,25 @@
         selectSetupGameMode: MO.selectSetupGameMode,
         continueCityFromMenu: MO.continueCityFromMenu,
         startCityFromMenu: MO.startCityFromMenu,
+        startChilloutFromMenu: MO.startChilloutFromMenu,
+        toggleChilloutMode: MO.toggleChilloutMode,
+        markForestryReforest: () => MO.forestryManager && MO.forestryManager.markReforestSpots(4),
+        toggleForestryAuto: () => MO.forestryManager && MO.forestryManager.toggleAutoMode(),
+        sellWoodshopDisplay: () => MO.forestryManager && MO.forestryManager.sellDisplayedWood(),
+        prospectMiningVeins: () => MO.miningManager && MO.miningManager.prospectNewVeins(4),
+        toggleMiningAuto: () => MO.miningManager && MO.miningManager.toggleAutoMode(),
+        sellMiningDisplay: () => MO.miningManager && MO.miningManager.sellDisplayedMinerals(),
+        expandFarmingField: () => MO.farmingManager && MO.farmingManager.expandContiguousField(),
+        toggleFarmingAuto: () => MO.farmingManager && MO.farmingManager.toggleAutoMode(),
+        sellFarmingDisplay: () => MO.farmingManager && MO.farmingManager.sellDisplayedHarvest(),
         toggleNpcPanel: MO.toggleNpcPanel,
         renderNpcRosterUI: MO.renderNpcRosterUI,
+        followWorker: MO.followWorker,
+        stopFollowingWorker: MO.stopFollowingWorker,
+        toggleEconomyPanel: MO.toggleEconomyPanel,
+        toggleJournalPanel: MO.toggleJournalPanel,
+        setEconomyTab: MO.setEconomyTab,
+        acceptCityContract: MO.acceptCityContract,
         focusVillageRegion: MO.focusVillageRegion,
         cycleSimSpeed: MO.cycleSimSpeed,
         toggleCinemaTour: MO.toggleCinemaTour,
@@ -235,6 +252,24 @@
         if (MO.updateCityConstructionAutomation) {
             MO.updateCityConstructionAutomation(fixedDt, simTime);
         }
+        if (MO.chilloutManager && MO.chilloutManager.update) {
+            MO.chilloutManager.update(fixedDt, simTime);
+        }
+        if (MO.economyManager && MO.economyManager.update) {
+            MO.economyManager.update(fixedDt, simTime);
+        }
+        if (MO.trafficManager && MO.trafficManager.update) {
+            MO.trafficManager.update(fixedDt, simTime);
+        }
+        if (MO.forestryManager && MO.forestryManager.update) {
+            MO.forestryManager.update(fixedDt, simTime);
+        }
+        if (MO.miningManager && MO.miningManager.update) {
+            MO.miningManager.update(fixedDt, simTime);
+        }
+        if (MO.farmingManager && MO.farmingManager.update) {
+            MO.farmingManager.update(fixedDt, simTime);
+        }
         MO.updateScreensaverAutopilot(fixedDt, simTime);
     }
 
@@ -261,6 +296,17 @@
         }
 
         const camOrbit = MO.camOrbit;
+        // Câmera de Acompanhamento de NPC (segue suavemente o personagem escolhido)
+        if (MO.state.followWorkerId !== null && MO.state.followWorkerId !== undefined && !camOrbit.isDragging) {
+            const followed = (MO.state.workers || []).find(w => w.id === MO.state.followWorkerId);
+            if (followed && followed.rig && followed.rig.group) {
+                const fp = followed.rig.group.position;
+                camOrbit.targetGoal.set(fp.x, fp.y + 0.65, fp.z);
+                camOrbit.targetRadius = Math.min(camOrbit.targetRadius || 12.0, 12.5);
+            } else if (MO.stopFollowingWorker) {
+                MO.stopFollowingWorker();
+            }
+        }
         if (MO.state.cityMode && MO.state.city && !MO.state.city.setupConfirmed && !camOrbit.isDragging) {
             camOrbit.theta += camDt * 0.065;
         }
@@ -321,14 +367,20 @@
         MO.initSiteLogistics();
 
         MO.applyBiomeStyle(MO.state.biome);
-        MO.createDioramaBase();
-        MO.createProceduralTerrainMesh();
-        MO.populateNatureAndSplats();
-        if (MO.state.cityMode && MO.state.city && MO.state.city.playerDriven) {
+        const isInfiniteCityStart = Boolean(MO.state.infiniteWorld && MO.state.cityMode && MO.state.city && MO.state.city.playerDriven);
+        if (isInfiniteCityStart) {
+            // Evita inicializar e descartar 49 chunks 3x seguidas no boot!
             MO.STATION_TOOLBOX = { x: -2.2, z: 2.0 };
-            if (MO.chunkManager) MO.chunkManager.init();
+            MO.createProceduralTerrainMesh();
+            MO.populateNatureAndSplats();
             if (MO.regionManager) MO.regionManager.reset();
             if (MO.constructionManager) MO.constructionManager.clearAll();
+            if (MO.economyManager && MO.economyManager.reset) {
+                MO.economyManager.reset();
+                if (MO.economyManager.logJournal) {
+                    MO.economyManager.logJournal('🌍', 'Novo mundo explorado', `Seed #${MO.state.seed} · Bioma ${MO.state.biome}`);
+                }
+            }
             if (MO.initToolbox) MO.initToolbox();
             MO.rebuildSiteProps(true);
             if (MO.rebuildCamp) MO.rebuildCamp(true);
@@ -337,15 +389,27 @@
             if (MO.setUnloadingBuilt) MO.setUnloadingBuilt(false);
             if (MO.setStockYardsBuilt) MO.setStockYardsBuilt(false);
             MO.state.phase = 0;
+            if (MO.chunkManager && MO.chunkManager.getHighwayCenterX) {
+                const entryX = MO.chunkManager.getHighwayCenterX(2, MO.state.seed) + 4.0;
+                MO.STATION_TOOLBOX = { x: entryX, z: 2.0 };
+            }
             if (MO.workerFactory) {
                 MO.workerFactory.hireSupervisor({
                     silent: true,
-                    profile: { name: MO.state.supervisorName || 'Supervisor Beto', role: 'supervisor', specialty: 'supervisor', helmet: 0xf8fafc, vest: 0xf59e0b, speed: 3.35 }
+                    profile: { name: MO.state.supervisorName || 'Pioneiro Beto', role: 'supervisor', specialty: 'supervisor', helmet: 0xf8fafc, vest: 0xf59e0b, speed: 3.35 }
                 });
                 MO.workerFactory.hireWorker({ kind: 'helper', silent: true, maxHelpers: 50 });
                 MO.workerFactory.syncNpcUI();
             }
+            if (MO.trafficManager && MO.trafficManager.init) MO.trafficManager.init();
+            if (MO.forestryManager && MO.forestryManager.init) MO.forestryManager.init();
+            if (MO.miningManager && MO.miningManager.init) MO.miningManager.init();
+            if (MO.farmingManager && MO.farmingManager.init) MO.farmingManager.init();
+            if (MO.focusCameraOn) MO.focusCameraOn(-6.0, 1.0, 29.0);
         } else {
+            MO.createDioramaBase();
+            MO.createProceduralTerrainMesh();
+            MO.populateNatureAndSplats();
             if (MO.worldManager) {
                 MO.worldManager.initDefaultWorld();
             }

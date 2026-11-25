@@ -108,22 +108,48 @@
         );
         skyGroup.add(sunDisc, moonDisc);
 
-        // 4 Pássaros simples em V voando devagar ao redor do diorama
-        const birdMat = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, side: THREE.DoubleSide });
-        for (let i = 0; i < 4; i++) {
+        // 6 Pássaros em bando voando sobre os bosques e vales
+        const birdMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, side: THREE.DoubleSide });
+        const birdWingGeo = new THREE.BoxGeometry(0.22, 0.02, 0.07);
+        if (MO.resources) MO.resources.protect(birdMat, birdWingGeo);
+        for (let i = 0; i < 6; i++) {
             const b = new THREE.Group();
-            const wL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.07), birdMat);
+            const wL = new THREE.Mesh(birdWingGeo, birdMat);
             wL.position.x = -0.10; wL.rotation.z = 0.25;
-            const wR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.07), birdMat);
+            const wR = new THREE.Mesh(birdWingGeo, birdMat);
             wR.position.x = 0.10; wR.rotation.z = -0.25;
             b.add(wL, wR);
             skyGroup.add(b);
             MO.state.site.birds.push({
                 mesh: b, wL, wR,
-                angle: i * 1.5,
-                radius: 7.5 + (i % 2) * 2.2,
-                height: 6.4 + (i % 3) * 0.9,
-                speed: 0.22 + i * 0.03
+                angle: i * 1.05,
+                radius: 7.5 + (i % 3) * 2.6,
+                height: 6.2 + (i % 3) * 1.1,
+                speed: 0.20 + (i % 4) * 0.035
+            });
+        }
+
+        // 6 Borboletas coloridas low-poly sobrevoando clareiras floridas de dia
+        const bfGeo = new THREE.BoxGeometry(0.11, 0.015, 0.09);
+        const bfColors = [0xfacc15, 0xf472b6, 0x38bdf8, 0xfb923c];
+        const bfMats = bfColors.map(c => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+        if (MO.resources) MO.resources.protect(bfGeo, ...bfMats);
+        MO.state.site.butterflies = [];
+        for (let i = 0; i < 6; i++) {
+            const bf = new THREE.Group();
+            const mat = bfMats[i % bfMats.length];
+            const wL = new THREE.Mesh(bfGeo, mat);
+            wL.position.x = -0.055;
+            const wR = new THREE.Mesh(bfGeo, mat);
+            wR.position.x = 0.055;
+            bf.add(wL, wR);
+            weatherGroup.add(bf);
+            MO.state.site.butterflies.push({
+                mesh: bf, wL, wR,
+                ox: ((i % 3) - 1) * 7.5 + (i * 1.7 % 3.5),
+                oz: (i < 3 ? -6.5 : 6.0) + (i % 2) * 2.2,
+                phase: i * 1.3,
+                speed: 0.65 + (i % 3) * 0.22
             });
         }
 
@@ -142,19 +168,20 @@
             MO.state.site.rainDrops.push(drop);
         }
 
-        // Vagalumes sutis à noite perto do acampamento e das árvores
+        // Vagalumes sutis à noite acompanhando a área dos bosques ao redor da câmera
         const ffMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.85 });
-        const ffGeo = new THREE.SphereGeometry(0.032, 6, 4);
-        for (let i = 0; i < 14; i++) {
+        const ffGeo = new THREE.SphereGeometry(0.036, 6, 4);
+        if (MO.resources) MO.resources.protect(ffMat, ffGeo);
+        for (let i = 0; i < 18; i++) {
             const ff = new THREE.Mesh(ffGeo, ffMat);
             ff.visible = false;
             weatherGroup.add(ff);
             MO.state.site.fireflies.push({
                 mesh: ff,
-                bx: (i % 2 === 0 ? 5.8 : -5.8) + (Math.random() - 0.5) * 3.5,
-                bz: -2.2 + (Math.random() - 0.5) * 4.2,
-                phase: Math.random() * Math.PI * 2,
-                speed: 0.8 + Math.random() * 0.7
+                bx: (i % 2 === 0 ? 7.2 : -7.2) + ((i * 3.1) % 7.0) - 3.5,
+                bz: -4.5 + ((i * 2.7) % 10.0),
+                phase: i * 0.9,
+                speed: 0.75 + (i % 4) * 0.22
             });
         }
     };
@@ -236,15 +263,35 @@
             }
         }
 
-        // Vagalumes à noite (sem chuva)
+        // Borboletas nas clareiras floridas (dia sem chuva)
+        if (Array.isArray(state.site.butterflies)) {
+            const showBf = !state.isNight && !raining;
+            state.site.butterflies.forEach((bf, i) => {
+                bf.mesh.visible = showBf;
+                if (!showBf) return;
+                const ang = t * bf.speed + bf.phase;
+                const x = (state.infiniteWorld ? tx : 0) + bf.ox + Math.sin(ang) * 2.2;
+                const z = (state.infiniteWorld ? tz : 0) + bf.oz + Math.cos(ang * 1.3) * 1.9;
+                const y = Math.max(0.35, MO.getTerrainHeight(x, z) + 0.65 + Math.sin(t * 3.6 + i) * 0.28);
+                bf.mesh.position.set(x, y, z);
+                bf.mesh.rotation.y = Math.atan2(Math.cos(ang) * 2.2, -Math.sin(ang * 1.3) * 1.9);
+                const flap = Math.sin(t * 18 + i * 1.7) * 0.72;
+                bf.wL.rotation.z = flap;
+                bf.wR.rotation.z = -flap;
+            });
+        }
+
+        // Vagalumes à noite acompanhando os bosques ao redor da câmera (sem chuva)
         const showFireflies = state.isNight && !raining;
         state.site.fireflies.forEach((ff, i) => {
             ff.mesh.visible = showFireflies;
             if (!showFireflies) return;
             const ang = t * ff.speed + ff.phase;
-            const x = ff.bx + Math.sin(ang) * 0.65;
-            const z = ff.bz + Math.cos(ang * 0.85) * 0.65;
-            const y = Math.max(0.4, MO.getTerrainHeight(x, z) + 0.55 + Math.sin(t * 2.4 + i) * 0.25);
+            const cx = state.infiniteWorld ? tx : 0;
+            const cz = state.infiniteWorld ? tz : 0;
+            const x = cx + ff.bx + Math.sin(ang) * 0.95;
+            const z = cz + ff.bz + Math.cos(ang * 0.85) * 0.95;
+            const y = Math.max(0.4, MO.getTerrainHeight(x, z) + 0.62 + Math.sin(t * 2.4 + i) * 0.28);
             ff.mesh.position.set(x, y, z);
             const pulse = 0.45 + 0.55 * Math.sin(t * 5.0 + i * 2.1);
             ff.mesh.scale.setScalar(pulse);

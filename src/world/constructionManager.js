@@ -309,9 +309,14 @@
                 ? snap.houseBaseY
                 : (MO.PLATEAU_Y || 0.28);
 
-            // Chaminé com fumaça suave (P2.2 + P3.0)
-            const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.75, 0.26), MO.mats.brickCeramic);
-            const chX = hx + 0.45;
+            // Seed determinística por casa para dar personalidade única a cada residência concluída
+            const houseSeed = Array.from(String(record.id || record.lotId || 'h1')).reduce((a, ch) => a + ch.charCodeAt(0) * 17, record.seed || 101);
+            const flowerPalettes = [0xf43f5e, 0xfacc15, 0xa855f7, 0xf97316, 0x38bdf8];
+            const roofAccents = [0x8f4024, 0x334155, 0x3f6212, 0x92400e];
+
+            // Chaminé com fumaça suave (posição varia sutilmente por casa)
+            const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.78, 0.28), MO.mats.brickCeramic);
+            const chX = hx + (houseSeed % 2 === 0 ? 0.45 : -0.45);
             const chY = baseY + 2.15;
             const chZ = hz - 0.35;
             chimney.position.set(chX, chY, chZ);
@@ -319,37 +324,89 @@
             archiveGroup.add(chimney);
 
             if (MO.state && MO.state.village && Array.isArray(MO.state.village.chimneys)) {
-                MO.state.village.chimneys.push({ lotId: record.lotId, x: chX, y: chY + 0.42, z: chZ });
+                MO.state.village.chimneys.push({ lotId: record.lotId, x: chX, y: chY + 0.44, z: chZ });
             }
 
-            // Banco de jardim + floreira na entrada da casa
-            const benchY = (MO.getTerrainHeight ? MO.getTerrainHeight(hx + 1.5, hz + 1.35) : baseY) + 0.14;
-            const bench = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.12, 0.28), MO.mats.doorWood);
-            bench.position.set(hx + 1.5, benchY, hz + 1.35);
-            bench.castShadow = true;
-            const planter = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.24), MO.mats.brickCeramic);
-            planter.position.set(hx - 1.4, benchY, hz + 1.35);
-            const flower1 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), getFlowerMat());
-            flower1.position.set(hx - 1.48, benchY + 0.13, hz + 1.35);
-            const flower2 = flower1.clone();
-            flower2.position.set(hx - 1.32, benchY + 0.13, hz + 1.35);
-            archiveGroup.add(bench, planter, flower1, flower2);
+            // Alpendre / Varanda frontal acolhedora com pilares e telhadinho
+            const porchY = baseY + 0.04;
+            const porchDeck = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.10, 0.62), MO.mats.doorWood);
+            porchDeck.position.set(hx, porchY, hz + 1.32);
+            porchDeck.receiveShadow = true;
+            const pPostL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.32, 0.08), MO.mats.wood);
+            pPostL.position.set(hx - 0.62, baseY + 0.70, hz + 1.56);
+            pPostL.castShadow = true;
+            const pPostR = pPostL.clone();
+            pPostR.position.x = hx + 0.62;
+            const awningMat = new THREE.MeshStandardMaterial({ color: roofAccents[houseSeed % roofAccents.length], roughness: 0.78 });
+            const porchRoof = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.09, 0.78), awningMat);
+            porchRoof.position.set(hx, baseY + 1.38, hz + 1.38);
+            porchRoof.rotation.x = 0.22;
+            porchRoof.castShadow = true;
+            archiveGroup.add(porchDeck, pPostL, pPostR, porchRoof);
 
-            // Painéis de janela com brilho quente interno à noite (P3.0)
+            // Cerca de quintal de madeira nas laterais + caixa de correio
+            const groundY = MO.getTerrainHeight ? MO.getTerrainHeight(hx, hz + 1.65) : baseY;
+            const fenceOffsets = [[-1.75, 1.72], [-1.05, 1.72], [1.05, 1.72], [1.75, 1.72], [-1.75, 0.92], [1.75, 0.92]];
+            fenceOffsets.forEach(([fx, fz]) => {
+                const st = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 0.06), MO.mats.wood);
+                st.position.set(hx + fx, groundY + 0.21, hz + fz);
+                st.castShadow = true;
+                archiveGroup.add(st);
+            });
+            const railL = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.05, 0.04), MO.mats.wood);
+            railL.position.set(hx - 1.40, groundY + 0.30, hz + 1.72);
+            const railR = railL.clone();
+            railR.position.x = hx + 1.40;
+            // Caixa de correio charmosa ao lado do portão
+            const mbPost = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.62, 5), MO.mats.trunkWood);
+            mbPost.position.set(hx - 0.92, groundY + 0.31, hz + 1.82);
+            const mbBox = new THREE.Mesh(
+                new THREE.BoxGeometry(0.16, 0.14, 0.24),
+                new THREE.MeshStandardMaterial({ color: flowerPalettes[(houseSeed + 1) % flowerPalettes.length], roughness: 0.5 })
+            );
+            mbBox.position.set(hx - 0.92, groundY + 0.64, hz + 1.82);
+            archiveGroup.add(railL, railR, mbPost, mbBox);
+
+            // Banco de jardim + floreira colorida + barril de chuva + pilha de lenha lateral
+            const benchY = (MO.getTerrainHeight ? MO.getTerrainHeight(hx + 1.4, hz + 1.35) : baseY) + 0.14;
+            const bench = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.12, 0.28), MO.mats.doorWood);
+            bench.position.set(hx + 1.42, benchY, hz + 1.32);
+            bench.castShadow = true;
+            const planter = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, 0.26), MO.mats.brickCeramic);
+            planter.position.set(hx - 1.38, benchY, hz + 1.32);
+            const fMat = new THREE.MeshStandardMaterial({ color: flowerPalettes[houseSeed % flowerPalettes.length], roughness: 0.65 });
+            const flower1 = new THREE.Mesh(new THREE.SphereGeometry(0.085, 6, 5), fMat);
+            flower1.position.set(hx - 1.48, benchY + 0.13, hz + 1.32);
+            const flower2 = flower1.clone();
+            flower2.position.set(hx - 1.28, benchY + 0.13, hz + 1.32);
+            const shrub = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(0.24, 0),
+                new THREE.MeshStandardMaterial({ color: 0x3f842c, roughness: 0.9, flatShading: true })
+            );
+            shrub.position.set(hx + 1.62, groundY + 0.18, hz + 0.55);
+            const rainBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.15, 0.34, 8), MO.mats.doorWood);
+            rainBarrel.position.set(hx - 1.62, groundY + 0.17, hz + 0.45);
+            rainBarrel.castShadow = true;
+            archiveGroup.add(bench, planter, flower1, flower2, shrub, rainBarrel);
+
+            // Painéis de janela com brilho quente interno à noite (frente + lateral)
             const winMat = getWarmWindowMat();
             [-0.82, 0.82].forEach(wx => {
                 const winPane = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.04), winMat);
                 winPane.position.set(hx + wx, baseY + 1.05, hz + 1.02);
                 archiveGroup.add(winPane);
             });
+            const sideWin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.36, 0.44), winMat);
+            sideWin.position.set(hx + 1.02, baseY + 1.05, hz);
+            archiveGroup.add(sideWin);
 
             // Poste/lanterna acolhedora noturna na fachada
-            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.15, 6), MO.mats.steel);
-            post.position.set(hx + 1.25, benchY + 0.42, hz + 1.65);
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.18, 6), MO.mats.steel);
+            post.position.set(hx + 1.15, benchY + 0.44, hz + 1.72);
             const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), getPorchBulbMat());
-            bulb.position.set(hx + 1.25, benchY + 1.02, hz + 1.65);
-            const porchLight = new THREE.PointLight(0xffb76b, MO.state.isNight ? 2.0 : 0.3, 4.8);
-            porchLight.position.set(hx + 1.25, benchY + 1.0, hz + 1.75);
+            bulb.position.set(hx + 1.15, benchY + 1.04, hz + 1.72);
+            const porchLight = new THREE.PointLight(0xffb76b, MO.state.isNight ? 2.0 : 0.3, 5.2);
+            porchLight.position.set(hx + 1.15, benchY + 1.02, hz + 1.80);
             archiveGroup.add(post, bulb, porchLight);
 
             if (!Array.isArray(record.lights)) record.lights = [];

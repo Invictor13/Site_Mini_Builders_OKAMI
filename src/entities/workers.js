@@ -237,6 +237,9 @@
         }
         MO.populateBuildableLotWeeds();
         if (MO.initToolbox) MO.initToolbox();
+        if (MO.forestryManager && MO.forestryManager.reset) MO.forestryManager.reset();
+        if (MO.miningManager && MO.miningManager.reset) MO.miningManager.reset();
+        if (MO.farmingManager && MO.farmingManager.reset) MO.farmingManager.reset();
         MO.placeMixerStationOnTerrain();
         if (MO.setMixerBuilt) MO.setMixerBuilt(false);
         if (MO.initWorkbench) MO.initWorkbench();
@@ -319,8 +322,9 @@
 
     MO.updateScreensaverCamera = function(dt, t) {
         const state = MO.state;
-        if ((!state.screensaver && !state.cinemaTour) || MO.camOrbit.isDragging) return;
-        MO.camOrbit.theta += dt * (state.cinemaTour ? 0.11 : 0.14);
+        const isChillout = Boolean(state.city && state.city.chilloutMode);
+        if ((!state.screensaver && !state.cinemaTour && !isChillout) || MO.camOrbit.isDragging) return;
+        MO.camOrbit.theta += dt * (isChillout ? 0.075 : (state.cinemaTour ? 0.11 : 0.14));
         MO.camOrbit.phi = 0.84 + Math.sin(t * 0.22) * 0.08;
 
         if (state.cinemaTour && MO.regionManager && MO.focusCameraOn) {

@@ -89,15 +89,15 @@
         window.addEventListener('orientationchange', () => setTimeout(handleResize, 120));
     };
 
-    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x26211d, 0.46);
+    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x26352a, 0.62);
     scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffe7c7, 1.38);
+    const sunLight = new THREE.DirectionalLight(0xffe7c7, 1.42);
     sunLight.position.set(14, 19, 12);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
-    const sd = 22;
+    const sd = 24;
     sunLight.shadow.camera.left = -sd;
     sunLight.shadow.camera.right = sd;
     sunLight.shadow.camera.top = sd;
@@ -105,8 +105,8 @@
     sunLight.shadow.bias = -0.0005;
     scene.add(sunLight);
 
-    const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.28);
-    rimLight.position.set(-14, 8, -11);
+    const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.38);
+    rimLight.position.set(-14, 10, -12);
     scene.add(rimLight);
 
     MO.lights = { hemiLight, sunLight, rimLight };
@@ -209,9 +209,15 @@
     // Ciclo suave Dia -> Entardecer -> Noite para o Protetor de Tela
     const cSunDay = new THREE.Color(0xffe7c7);
     const cSunSunset = new THREE.Color(0xff9b54);
-    const cSunNight = new THREE.Color(0x6488ea);
+    const cSunNight = new THREE.Color(0x93c5fd);
     const cSkyDay = new THREE.Color(0xdbeafe);
-    const cSkyNight = new THREE.Color(0x1e293b);
+    const cSkyNight = new THREE.Color(0x4b6fa5);
+    const cGroundDay = new THREE.Color(0x362d24);
+    const cGroundNight = new THREE.Color(0x1f3028);
+    const cFogDay = new THREE.Color(0x93d5f5);
+    const cFogNight = new THREE.Color(0x18263f);
+    const cFogSunset = new THREE.Color(0xd97757);
+    let lastShadowExtent = 0;
 
     MO.updateAtmosphere = function(dt, t) {
         const state = MO.state;
@@ -228,16 +234,20 @@
         const sunAngle = tod * Math.PI * 2;
         const elevation = Math.sin(sunAngle); // >0 dia, <0 noite
 
-        const sd = (MO.state && MO.state.infiniteWorld) ? 24 : 13;
-        if (sunLight.shadow && sunLight.shadow.camera) {
+        const sd = (MO.state && MO.state.infiniteWorld) ? 26 : 13;
+        if (sunLight.shadow && sunLight.shadow.camera && sd !== lastShadowExtent) {
+            lastShadowExtent = sd;
             sunLight.shadow.camera.left = -sd;
             sunLight.shadow.camera.right = sd;
             sunLight.shadow.camera.top = sd;
             sunLight.shadow.camera.bottom = -sd;
+            if (sunLight.shadow.camera.updateProjectionMatrix) {
+                sunLight.shadow.camera.updateProjectionMatrix();
+            }
         }
         const tx = camOrbit && camOrbit.target ? camOrbit.target.x : 0;
         const tz = camOrbit && camOrbit.target ? camOrbit.target.z : 0;
-        sunLight.position.set(tx + Math.cos(sunAngle) * 18, Math.max(5, Math.abs(elevation) * 22), tz + 14);
+        sunLight.position.set(tx + Math.cos(sunAngle) * 18, Math.max(7, Math.abs(elevation) * 24), tz + 14);
         if (sunLight.target) {
             sunLight.target.position.set(tx, 0, tz);
             if (!sunLight.target.parent) scene.add(sunLight.target);
@@ -246,14 +256,22 @@
         const dayFactor = Math.max(0, Math.min(1, (elevation + 0.15) / 0.55));
         const sunsetFactor = Math.max(0, 1 - Math.abs(elevation) / 0.35);
 
-        sunLight.intensity = 0.34 + dayFactor * 1.32;
+        // Iluminação noturna equilibrada: luar prateado e preenchimento hemisférico preservam a leitura do relevo, água e árvores
+        sunLight.intensity = 0.58 + dayFactor * 1.15;
         sunLight.color.copy(cSunNight).lerp(cSunDay, dayFactor).lerp(cSunSunset, sunsetFactor * 0.65);
 
-        hemiLight.intensity = 0.28 + dayFactor * 0.42;
+        hemiLight.intensity = 0.54 + dayFactor * 0.36;
         hemiLight.color.copy(cSkyNight).lerp(cSkyDay, dayFactor);
-        rimLight.intensity = 0.22 + (1 - dayFactor) * 0.28;
+        if (hemiLight.groundColor && hemiLight.groundColor.copy) {
+            hemiLight.groundColor.copy(cGroundNight).lerp(cGroundDay, dayFactor);
+        }
+        rimLight.intensity = 0.36 + (1 - dayFactor) * 0.16;
+        if (MO.renderer) {
+            MO.renderer.toneMappingExposure = 0.96 + (1 - dayFactor) * 0.16;
+        }
         if (scene.fog && scene.fog.color) {
-            scene.fog.color.setHex(0x0c111b).lerp(new THREE.Color(0x88c7e8), dayFactor).lerp(new THREE.Color(0xd97757), sunsetFactor * 0.42);
+            scene.fog.color.copy(cFogNight).lerp(cFogDay, dayFactor).lerp(cFogSunset, sunsetFactor * 0.42);
+            scene.fog.density = 0.0023 + (1 - dayFactor) * 0.0006;
         }
         if (typeof document !== 'undefined' && document.body && state.biome === 'forest') {
             if (dayFactor > 0.55) {
@@ -261,7 +279,7 @@
             } else if (sunsetFactor > 0.35) {
                 document.body.style.background = 'linear-gradient(180deg, #475569 0%, #c26d4f 48%, #f59e0b 78%, #1e293b 100%)';
             } else {
-                document.body.style.background = 'radial-gradient(circle at 50% 42%, #172033 0%, #0d1421 62%, #060910 100%)';
+                document.body.style.background = 'radial-gradient(circle at 50% 42%, #1e2d47 0%, #131d31 62%, #0a101d 100%)';
             }
         }
 
@@ -272,8 +290,24 @@
             if (skyBtn) skyBtn.textContent = state.isNight ? '🌙' : '☀️';
         }
 
-        // Atualiza iluminação automática noturna das obras concluídas/em andamento
+        // Atualiza iluminação automática noturna das obras concluídas/em andamento e da base do Ponto Zero
         const nightGlow = state.isNight ? 1.0 : 0.0;
+        const fireFlicker = 0.88 + Math.sin((t || 0) * 11.5) * 0.12;
+        if (state.site && state.site.toolboxLight) {
+            state.site.toolboxLight.intensity = state.isNight ? 1.85 : 0.0;
+        }
+        if (state.site && state.site.toolboxLanternMat) {
+            state.site.toolboxLanternMat.emissiveIntensity = state.isNight ? 2.2 : 0.25;
+        }
+        if (state.site && state.site.toolboxFireLight) {
+            state.site.toolboxFireLight.intensity = state.isNight ? (1.45 * fireFlicker) : 0.0;
+        }
+        if (state.site && state.site.toolboxEmberMat) {
+            state.site.toolboxEmberMat.emissiveIntensity = (state.isNight ? 1.85 : 0.30) * fireFlicker;
+        }
+        if (state.site && state.site.toolboxEmbers && state.site.toolboxEmbers.scale) {
+            state.site.toolboxEmbers.scale.set(1, state.isNight ? (0.9 + fireFlicker * 0.35) : 0.45, 1);
+        }
         if (state.mode === 'house' && state.elecLights.length > 0 && state.elecPowerOn) {
             state.elecLights.forEach(l => {
                 l.light.intensity = state.isNight ? 2.4 : 1.5;
@@ -292,6 +326,12 @@
         }
         if (MO.constructionManager && MO.constructionManager.updateWarmWindowGlow) {
             MO.constructionManager.updateWarmWindowGlow(state.isNight);
+        }
+        if (MO.updateCityStreetLights) {
+            MO.updateCityStreetLights(state.isNight);
+        }
+        if (MO.chunkManager && MO.chunkManager.updateHighwayLights) {
+            MO.chunkManager.updateHighwayLights(state.isNight);
         }
         if (state.mode === 'bridge' && state.bridge.lamps.length > 0) {
             state.bridge.lamps.forEach(lp => {

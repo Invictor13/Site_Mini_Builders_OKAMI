@@ -24,6 +24,15 @@
         { helmet: 0x60a5fa, vest: 0x1e3a8a, name: 'Moradora Manu', role: 'resident', specialty: 'resident', speed: 2.98 }
     ];
 
+    const PERSONALITY_TRAITS = [
+        { id: 'cuidadoso', label: 'Cuidadoso', icon: '🎯', speedMult: 0.98, xpMult: 1.22, socialBonus: 1 },
+        { id: 'agil', label: 'Ágil', icon: '⚡', speedMult: 1.08, xpMult: 1.0, socialBonus: 0 },
+        { id: 'sociavel', label: 'Sociável', icon: '🤝', speedMult: 1.0, xpMult: 1.05, socialBonus: 4 },
+        { id: 'observador', label: 'Observador', icon: '🔭', speedMult: 1.02, xpMult: 1.15, socialBonus: 2 },
+        { id: 'dedicado', label: 'Dedicado', icon: '🔥', speedMult: 1.05, xpMult: 1.10, socialBonus: 1 }
+    ];
+    MO.PERSONALITY_TRAITS = PERSONALITY_TRAITS;
+
     MO.SUPERVISOR_PROFILE = SUPERVISOR_PROFILE;
     MO.HELPER_PROFILES = HELPER_PROFILES;
     MO.WORKER_PROFILES = HELPER_PROFILES;
@@ -64,6 +73,19 @@
             lunchGeo: new THREE.BoxGeometry(0.15, 0.06, 0.12),
             clipboardGeo: new THREE.BoxGeometry(0.14, 0.02, 0.19),
             sawBladeGeo: new THREE.BoxGeometry(0.02, 0.07, 0.34),
+            axeHandleGeo: new THREE.CylinderGeometry(0.015, 0.017, 0.44, 6),
+            axeBladeGeo: new THREE.BoxGeometry(0.032, 0.12, 0.14),
+            carryLogGeo: new THREE.CylinderGeometry(0.095, 0.095, 0.56, 8),
+            pickHandleGeo: new THREE.CylinderGeometry(0.015, 0.017, 0.48, 6),
+            pickHeadGeo: new THREE.BoxGeometry(0.032, 0.30, 0.055),
+            carryChunkGeo: new THREE.DodecahedronGeometry(0.14, 0),
+            carryStoneBlockGeo: new THREE.BoxGeometry(0.28, 0.18, 0.20),
+            canBodyGeo: new THREE.CylinderGeometry(0.08, 0.08, 0.16, 8),
+            canSpoutGeo: new THREE.CylinderGeometry(0.015, 0.024, 0.16, 6),
+            sickleBladeGeo: new THREE.BoxGeometry(0.18, 0.025, 0.08),
+            carryBasketGeo: new THREE.CylinderGeometry(0.14, 0.11, 0.18, 8),
+            carryCrateGeo: new THREE.BoxGeometry(0.30, 0.16, 0.22),
+            canMat: new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.35, metalness: 0.25 }),
 
             legMat: new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 }),
             ponchoMat: new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35 }),
@@ -194,6 +216,32 @@
         const carryPlank = new THREE.Mesh(S.plankGeo, MO.mats.formwork);
         carryPlank.position.set(0, 0.22, 0.22); carryPlank.visible = false;
 
+        const carryLog = new THREE.Mesh(S.carryLogGeo, MO.mats.trunkWood);
+        carryLog.rotation.z = Math.PI / 2;
+        carryLog.position.set(0, 0.22, 0.22);
+        carryLog.castShadow = true;
+        carryLog.visible = false;
+
+        const carryChunk = new THREE.Mesh(S.carryChunkGeo, MO.mats.stone);
+        carryChunk.position.set(0, 0.22, 0.22);
+        carryChunk.castShadow = true;
+        carryChunk.visible = false;
+
+        const carryStoneBlock = new THREE.Mesh(S.carryStoneBlockGeo, MO.mats.concrete || MO.mats.stone);
+        carryStoneBlock.position.set(0, 0.22, 0.22);
+        carryStoneBlock.castShadow = true;
+        carryStoneBlock.visible = false;
+
+        const carryBasket = new THREE.Mesh(S.carryBasketGeo, MO.mats.formwork || MO.mats.wood);
+        carryBasket.position.set(0, 0.22, 0.22);
+        carryBasket.castShadow = true;
+        carryBasket.visible = false;
+
+        const carryCrate = new THREE.Mesh(S.carryCrateGeo, MO.mats.wood);
+        carryCrate.position.set(0, 0.22, 0.22);
+        carryCrate.castShadow = true;
+        carryCrate.visible = false;
+
         const carryBeam = new THREE.Mesh(S.beamGeo, MO.mats.steel);
         carryBeam.position.set(0, 0.28, 0.22); carryBeam.visible = false;
 
@@ -258,6 +306,47 @@
         toolSaw.add(sawBlade); toolSaw.visible = false;
         armR.add(toolSaw);
 
+        const toolAxe = new THREE.Group();
+        const axeHandle = new THREE.Mesh(S.axeHandleGeo, MO.mats.wood);
+        axeHandle.rotation.x = Math.PI / 2;
+        axeHandle.position.set(0, -0.09, 0.18);
+        const axeBlade = new THREE.Mesh(S.axeBladeGeo, MO.mats.steel);
+        axeBlade.position.set(0, -0.13, 0.36);
+        toolAxe.add(axeHandle, axeBlade);
+        toolAxe.visible = false;
+        armR.add(toolAxe);
+
+        const toolPickaxe = new THREE.Group();
+        const pickHandle = new THREE.Mesh(S.pickHandleGeo, MO.mats.wood);
+        pickHandle.rotation.x = Math.PI / 2;
+        pickHandle.position.set(0, -0.09, 0.19);
+        const pickHead = new THREE.Mesh(S.pickHeadGeo, MO.mats.steel);
+        pickHead.position.set(0, -0.09, 0.40);
+        toolPickaxe.add(pickHandle, pickHead);
+        toolPickaxe.visible = false;
+        armR.add(toolPickaxe);
+
+        const toolCan = new THREE.Group();
+        const canBody = new THREE.Mesh(S.canBodyGeo, S.canMat);
+        canBody.position.set(0, -0.10, 0.14);
+        const canSpout = new THREE.Mesh(S.canSpoutGeo, S.canMat);
+        canSpout.position.set(0, -0.06, 0.25);
+        canSpout.rotation.x = 0.8;
+        toolCan.add(canBody, canSpout);
+        toolCan.visible = false;
+        armR.add(toolCan);
+
+        const toolSickle = new THREE.Group();
+        const sicHandle = new THREE.Mesh(S.hammerShaftGeo, MO.mats.wood);
+        sicHandle.rotation.x = Math.PI / 2;
+        sicHandle.position.set(0, -0.10, 0.12);
+        const sicBlade = new THREE.Mesh(S.sickleBladeGeo, MO.mats.steel);
+        sicBlade.position.set(0.05, -0.10, 0.26);
+        sicBlade.rotation.y = 0.45;
+        toolSickle.add(sicHandle, sicBlade);
+        toolSickle.visible = false;
+        armR.add(toolSickle);
+
         const propCup = new THREE.Mesh(S.cupGeo, S.cupMat);
         propCup.position.set(0, -0.10, 0.09);
         propCup.visible = false;
@@ -276,7 +365,7 @@
         torsoPivot.add(
             torso, rainPoncho, armL, armR, head, helmet,
             headlampMount, headlampLens, headlampCone, headlampLight,
-            carryBrick, carryPlank, carryBeam, carryBucket, carrySack, carryRebar, carryWheelbarrow
+            carryBrick, carryPlank, carryLog, carryChunk, carryStoneBlock, carryBasket, carryCrate, carryBeam, carryBucket, carrySack, carryRebar, carryWheelbarrow
         );
         g.add(legL, legR, torsoPivot);
 
@@ -288,8 +377,8 @@
         return {
             group: g, legL, legR, torsoPivot, armL, armR, rainPoncho,
             headlampLensMat, headlampConeMat, headlampCone, headlampLight,
-            carryBrick, carryPlank, carryBeam, carryBucket, carrySack, carryRebar, carryWheelbarrow,
-            toolHoe, toolHammer, toolTrowel, toolSaw,
+            carryBrick, carryPlank, carryLog, carryChunk, carryStoneBlock, carryBasket, carryCrate, carryBeam, carryBucket, carrySack, carryRebar, carryWheelbarrow,
+            toolHoe, toolHammer, toolTrowel, toolSaw, toolAxe, toolPickaxe, toolCan, toolSickle,
             propCup, propLunch, propClipboard,
             setBadge: badge.setIcon
         };
@@ -298,6 +387,11 @@
     function setWorkerTool(rig, toolName) {
         rig.carryBrick.visible = toolName === 'brick';
         rig.carryPlank.visible = toolName === 'plank';
+        if (rig.carryLog) rig.carryLog.visible = toolName === 'log';
+        if (rig.carryChunk) rig.carryChunk.visible = toolName === 'chunk';
+        if (rig.carryStoneBlock) rig.carryStoneBlock.visible = toolName === 'stone-block';
+        if (rig.carryBasket) rig.carryBasket.visible = toolName === 'basket';
+        if (rig.carryCrate) rig.carryCrate.visible = toolName === 'crate';
         rig.carryBeam.visible = toolName === 'beam';
         rig.carryBucket.visible = toolName === 'bucket';
         rig.carrySack.visible = toolName === 'sack';
@@ -307,6 +401,10 @@
         rig.toolHammer.visible = toolName === 'hammer';
         rig.toolTrowel.visible = toolName === 'trowel';
         if (rig.toolSaw) rig.toolSaw.visible = toolName === 'saw';
+        if (rig.toolAxe) rig.toolAxe.visible = toolName === 'axe';
+        if (rig.toolPickaxe) rig.toolPickaxe.visible = toolName === 'pickaxe';
+        if (rig.toolCan) rig.toolCan.visible = toolName === 'can';
+        if (rig.toolSickle) rig.toolSickle.visible = toolName === 'sickle';
         rig.propCup.visible = toolName === 'cup';
         rig.propLunch.visible = toolName === 'lunch';
         rig.propClipboard.visible = toolName === 'clipboard';
@@ -381,11 +479,18 @@
         const sy = MO.getTerrainHeight ? MO.getTerrainHeight(sx, sz) : 0;
         rig.group.position.set(sx, sy, sz);
 
+        const trait = options.trait
+            ? (PERSONALITY_TRAITS.find(t => t.id === options.trait) || PERSONALITY_TRAITS[idx % PERSONALITY_TRAITS.length])
+            : PERSONALITY_TRAITS[(idx + (state.seed || 0)) % PERSONALITY_TRAITS.length];
+
         return {
             id: idx,
             name: profile.name,
             role: profile.role,
             specialty: profile.specialty || 'mason',
+            trait: trait.id,
+            traitLabel: trait.label,
+            traitIcon: trait.icon,
             rig,
             task: null,
             tx: sx,
@@ -396,14 +501,87 @@
             stepDist: 0,
             stepSide: 1,
             stuckTimer: 0,
-            speed: profile.speed,
+            speed: profile.speed * (trait.speedMult || 1.0),
             energy: options.energy !== undefined ? options.energy : (95 - (idx % 4) * 5),
             hydration: options.hydration !== undefined ? options.hydration : (92 - (idx % 4) * 6),
             hunger: options.hunger !== undefined ? options.hunger : (90 - (idx % 4) * 7),
+            morale: options.morale !== undefined ? options.morale : 84,
+            xp: options.xp !== undefined ? options.xp : 0,
+            level: options.level !== undefined ? options.level : 1,
+            tasksCompleted: options.tasksCompleted !== undefined ? options.tasksCompleted : 0,
+            celebrateTimer: 0,
+            relationships: {},
+            memory: options.memory ? {
+                builtLots: Array.isArray(options.memory.builtLots) ? options.memory.builtLots.slice() : [],
+                homeLotId: options.memory.homeLotId || null,
+                homeLabel: options.memory.homeLabel || '',
+                recentEvents: Array.isArray(options.memory.recentEvents) ? options.memory.recentEvents.slice(0, 5) : []
+            } : {
+                builtLots: [],
+                homeLotId: null,
+                homeLabel: '',
+                recentEvents: ['Chegou à comunidade']
+            },
             socialCooldown: 0,
             sleepingInside: false,
-            statusText: profile.role === 'supervisor' ? 'Analisando o terreno' : 'Aguardando na Caixa de Ferramentas'
+            statusText: profile.role === 'supervisor' ? 'Analisando o terreno' : 'Aguardando na área inicial'
         };
+    }
+
+    function rememberWorkerEvent(w, text) {
+        if (!w || !text) return;
+        if (!w.memory) w.memory = { builtLots: [], homeLotId: null, homeLabel: '', recentEvents: [] };
+        if (w.memory.recentEvents[0] === text) return;
+        w.memory.recentEvents.unshift(text);
+        if (w.memory.recentEvents.length > 5) w.memory.recentEvents.length = 5;
+    }
+
+    function recordWorkerBuiltLot(w, lotId, lotLabel) {
+        if (!w || !lotId) return;
+        if (!w.memory) w.memory = { builtLots: [], homeLotId: null, homeLabel: '', recentEvents: [] };
+        if (!w.memory.builtLots.some(b => b.lotId === lotId)) {
+            w.memory.builtLots.push({ lotId, label: lotLabel || lotId });
+            if (!w.memory.homeLotId) {
+                w.memory.homeLotId = lotId;
+                w.memory.homeLabel = lotLabel || lotId;
+            }
+            rememberWorkerEvent(w, `Ajudou a construir ${lotLabel || lotId}`);
+        }
+    }
+
+    function awardWorkerExperience(w, xpGain = 5, moraleGain = 1) {
+        if (!w) return false;
+        const traitObj = PERSONALITY_TRAITS.find(t => t.id === w.trait);
+        const effXp = Math.round(xpGain * (traitObj ? traitObj.xpMult : 1.0));
+        w.tasksCompleted = (w.tasksCompleted || 0) + 1;
+        w.xp = (w.xp || 0) + effXp;
+        w.morale = Math.max(20, Math.min(100, (w.morale ?? 82) + moraleGain));
+        const nextLevel = Math.min(5, 1 + Math.floor(w.xp / 30));
+        if (nextLevel > (w.level || 1)) {
+            w.level = nextLevel;
+            w.celebrateTimer = 2.0;
+            w.morale = Math.min(100, w.morale + 8);
+            rememberWorkerEvent(w, `Alcançou Nível ${w.level}`);
+            if (MO.economyManager && MO.economyManager.logJournal) {
+                MO.economyManager.logJournal('⭐', `${w.name} subiu para Nível ${w.level}`, `Traço: ${w.traitLabel || 'Dedicado'}`);
+            }
+            if (MO.showToast) MO.showToast(`⭐ ${w.name} subiu para Nível ${w.level}! (+velocidade de trabalho)`, '⭐');
+            return true;
+        }
+        return false;
+    }
+
+    function recordPeerBond(wA, wB, delta = 4) {
+        if (!wA || !wB || wA === wB) return;
+        if (!wA.relationships) wA.relationships = {};
+        if (!wB.relationships) wB.relationships = {};
+        const tA = PERSONALITY_TRAITS.find(t => t.id === wA.trait);
+        const effDelta = delta + (tA ? (tA.socialBonus || 0) : 0);
+        const keyB = wB.name || String(wB.id);
+        const keyA = wA.name || String(wA.id);
+        wA.relationships[keyB] = Math.min(100, (wA.relationships[keyB] || 10) + effDelta);
+        wB.relationships[keyA] = Math.min(100, (wB.relationships[keyA] || 10) + effDelta);
+        rememberWorkerEvent(wA, `Conversou com ${keyB}`);
     }
 
     function syncNpcUI() {
@@ -535,6 +713,10 @@
         getNpcCounts,
         syncNpcUI,
         setWorkerTool,
-        setBodyVisible
+        setBodyVisible,
+        awardWorkerExperience,
+        recordPeerBond,
+        rememberWorkerEvent,
+        recordWorkerBuiltLot
     };
 })(window.MO = window.MO || {});

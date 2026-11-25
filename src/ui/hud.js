@@ -96,7 +96,10 @@
         const lotTag = activeLot ? ` · ${activeLot.label.toUpperCase()}` : '';
         const ind = document.getElementById('phase-indicator');
         if (ind) {
-            if (state.cityMode && !activeConstr) {
+            if (state.cityMode && state.city && state.city.chilloutMode) {
+                const stLbl = (state.city.chilloutStage || 'CONSTRUINDO').toUpperCase();
+                ind.textContent = `🎧 CHILLOUT · ${stLbl} · ${biomeLabel} #${state.seed}`;
+            } else if (state.cityMode && !activeConstr) {
                 ind.textContent = `CIDADE LIVRE · ${biomeLabel} #${state.seed}`;
             } else {
                 ind.textContent = `${modeLabels[mode]} · FASE ${state.phase} · ${pName}${lotTag} · ${biomeLabel} #${state.seed}`;
@@ -202,7 +205,7 @@
             const hasRoute = hasBay && MO.computeRoadRouteToUnload && MO.computeRoadRouteToUnload(MO.STATION_UNLOAD) !== null;
             stEl.textContent = !hasBay
                 ? 'Coloque uma Baia'
-                : (hasRoute ? 'Via + Baia prontas ✓' : 'Conecte estrada na Baia');
+                : (hasRoute ? 'Rodovia → Baia OK ✓' : 'Ligue a Rodovia na Baia');
         }
         return nextOpen;
     };
@@ -342,14 +345,207 @@
             const en = Math.round(w.energy !== undefined ? w.energy : 100);
             const hy = Math.round(w.hydration !== undefined ? w.hydration : 100);
             const hu = Math.round(w.hunger !== undefined ? w.hunger : 100);
-            return `<div class="bg-white/5 rounded-xl px-2.5 py-1.5 text-[11px] space-y-0.5 border border-white/5">
+            const mo = Math.round(w.morale !== undefined ? w.morale : 84);
+            const lv = w.level || 1;
+            const moodIco = mo >= 80 ? '😊' : (mo >= 50 ? '😐' : '😓');
+            const traitTag = w.traitLabel ? `${w.traitIcon || '✨'} ${w.traitLabel}` : '';
+            const lastMem = (w.memory && Array.isArray(w.memory.recentEvents) && w.memory.recentEvents[0]) ? w.memory.recentEvents[0] : '';
+            const isFollowing = state.followWorkerId === w.id;
+            return `<div class="bg-white/5 rounded-xl px-2.5 py-1.5 text-[11px] space-y-0.5 border ${isFollowing ? 'border-sky-400/60' : 'border-white/5'}">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="font-semibold text-slate-100 shrink-0">${ico} ${w.name}</span>
-                    <span class="text-[10px] text-slate-400">⚡${en}% 💧${hy}% 🍲${hu}%</span>
+                    <span class="font-semibold text-slate-100 shrink-0">${ico} ${w.name} <span class="text-[9px] text-amber-300 font-bold">Nv.${lv}</span></span>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] text-slate-400">${moodIco}${mo}% ⚡${en}%</span>
+                        <button onclick="followWorker(${w.id})" class="px-1.5 py-0.5 rounded-md ${isFollowing ? 'bg-sky-500 text-white' : 'bg-white/10 hover:bg-sky-500/40 text-sky-200'} text-[9px] font-semibold" title="Acompanhar rotina deste NPC">🎥</button>
+                    </div>
                 </div>
-                <div class="text-[10px] text-slate-300 truncate">${status}</div>
+                <div class="flex items-center justify-between gap-2 text-[10px] text-slate-300">
+                    <span class="truncate">${status}</span>
+                    <span class="text-slate-400 shrink-0">💧${hy}% 🍲${hu}%</span>
+                </div>
+                ${(traitTag || lastMem) ? `<div class="flex items-center justify-between gap-2 text-[9px] text-slate-400 pt-0.5 border-t border-white/5"><span class="text-amber-200/80 shrink-0">${traitTag}</span><span class="truncate">${lastMem}</span></div>` : ''}
             </div>`;
         }).join('');
+    };
+
+    MO.followWorker = function(workerId) {
+        const state = MO.state;
+        if (!state || !Array.isArray(state.workers)) return null;
+        if (state.followWorkerId === workerId) {
+            return MO.stopFollowingWorker();
+        }
+        const target = state.workers.find(w => w.id === workerId);
+        if (!target) return null;
+        state.followWorkerId = target.id;
+        const pill = document.getElementById('follow-npc-pill');
+        const lbl = document.getElementById('follow-npc-label');
+        if (lbl) lbl.textContent = `Seguindo ${target.name}`;
+        if (pill && pill.classList) pill.classList.remove('hidden');
+        if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
+        if (MO.showToast) MO.showToast(`🎥 Câmera acompanhando ${target.name} (${target.traitLabel || target.role})`, '🎥');
+        return target;
+    };
+
+    MO.stopFollowingWorker = function() {
+        if (MO.state) MO.state.followWorkerId = null;
+        const pill = document.getElementById('follow-npc-pill');
+        if (pill && pill.classList) pill.classList.add('hidden');
+        if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
+        return null;
+    };
+
+    let economyPanelOpen = false;
+    let economyActiveTab = 'summary';
+
+    MO.setEconomyTab = function(tab = 'summary') {
+        economyActiveTab = tab;
+        ['summary', 'contracts', 'journal'].forEach(t => {
+            const view = document.getElementById(`eco-view-${t}`);
+            const btn = document.getElementById(`eco-tab-${t}`);
+            if (view && view.classList && typeof view.classList.toggle === 'function') {
+                view.classList.toggle('hidden', t !== tab);
+            }
+            if (btn && btn.classList && typeof btn.classList.toggle === 'function') {
+                btn.classList.toggle('active', t === tab);
+            }
+        });
+        if (MO.renderEconomyPanelUI) MO.renderEconomyPanelUI();
+        return tab;
+    };
+
+    MO.toggleEconomyPanel = function(forceVal, tab = null) {
+        const panel = document.getElementById('economy-panel');
+        const btn = document.getElementById('btn-economy-panel');
+        const jTop = document.getElementById('btn-journal-top');
+        const jBot = document.getElementById('btn-journal-menu');
+        if (!panel) return false;
+        const isHidden = (panel.classList && typeof panel.classList.contains === 'function')
+            ? panel.classList.contains('hidden')
+            : !economyPanelOpen;
+        const switchOnly = (forceVal === undefined && !isHidden && tab && tab !== economyActiveTab);
+        const nextOpen = switchOnly ? true : ((typeof forceVal === 'boolean') ? forceVal : isHidden);
+        economyPanelOpen = nextOpen;
+        if (tab) MO.setEconomyTab(tab);
+        if (panel.classList && typeof panel.classList.toggle === 'function') panel.classList.toggle('hidden', !nextOpen);
+        if (btn && btn.classList && typeof btn.classList.toggle === 'function') btn.classList.toggle('active', nextOpen && economyActiveTab !== 'journal');
+        if (jTop && jTop.classList && typeof jTop.classList.toggle === 'function') jTop.classList.toggle('active', nextOpen && economyActiveTab === 'journal');
+        if (jBot && jBot.classList && typeof jBot.classList.toggle === 'function') jBot.classList.toggle('active', nextOpen && economyActiveTab === 'journal');
+        if (nextOpen && MO.renderEconomyPanelUI) MO.renderEconomyPanelUI();
+        return nextOpen;
+    };
+
+    MO.toggleJournalPanel = function(forceVal) {
+        return MO.toggleEconomyPanel(forceVal, 'journal');
+    };
+
+    MO.acceptCityContract = function(contractId) {
+        if (MO.economyManager && MO.economyManager.acceptContract) {
+            return MO.economyManager.acceptContract(contractId);
+        }
+        return false;
+    };
+
+    MO.renderEconomyPanelUI = function() {
+        if (typeof document === 'undefined' || !MO.economyManager) return;
+        const panel = document.getElementById('economy-panel');
+        const isHidden = !panel || (panel.classList && typeof panel.classList.contains === 'function'
+            ? panel.classList.contains('hidden')
+            : !economyPanelOpen);
+        if (isHidden) return;
+
+        const dash = MO.economyManager.getDashboardSummary();
+        const cardsEl = document.getElementById('economy-summary-cards');
+        const barsEl = document.getElementById('economy-storage-bars');
+        const contractsEl = document.getElementById('economy-contracts-list');
+        const repEl = document.getElementById('economy-rep-badge');
+
+        if (repEl) repEl.textContent = `⭐ Rep. ${dash.reputation}`;
+        if (cardsEl) {
+            const netSign = dash.netPerCycle >= 0 ? `+${dash.netPerCycle}` : String(dash.netPerCycle);
+            const netColor = dash.netPerCycle >= 0 ? 'text-emerald-300' : 'text-rose-300';
+            cardsEl.innerHTML = `
+                <div class="bg-white/5 rounded-xl p-2 border border-white/5">
+                    <div class="text-[10px] text-slate-400">Moedas · Saldo/ciclo</div>
+                    <div class="font-bold text-yellow-300">🪙 ${dash.sandboxMode ? '∞' : dash.coins} <span class="${netColor} text-[10px] ml-1">(${dash.sandboxMode ? 'Livre' : netSign})</span></div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-2 border border-white/5">
+                    <div class="text-[10px] text-slate-400">Moradores · Equipe</div>
+                    <div class="font-bold text-sky-200">🏘️ ${dash.residents}/${dash.housingCapacity} <span class="text-slate-400 text-[10px] ml-1">👷 ${dash.workersCount}</span></div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-2 border border-white/5">
+                    <div class="text-[10px] text-slate-400">Obras Ativas</div>
+                    <div class="font-bold text-amber-200">🏗️ ${dash.activeSites}</div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-2 border border-white/5">
+                    <div class="text-[10px] text-slate-400">Moral da Equipe</div>
+                    <div class="font-bold text-emerald-300">😊 ${dash.avgMorale}%</div>
+                </div>
+            `;
+        }
+        if (barsEl) {
+            const rows = [
+                { icon: '🪵', label: 'Madeira', data: dash.resources.wood, bar: 'bg-amber-400' },
+                { icon: '🪨', label: 'Pedra', data: dash.resources.stone, bar: 'bg-slate-300' },
+                { icon: '⛓️', label: 'Ferro', data: dash.resources.iron, bar: 'bg-sky-400' },
+                { icon: '🌾', label: 'Alimentos', data: dash.resources.food, bar: 'bg-lime-400' }
+            ];
+            barsEl.innerHTML = rows.map(r => {
+                const pct = dash.sandboxMode ? 100 : Math.min(100, Math.round((r.data.current / Math.max(1, r.data.cap)) * 100));
+                const flowTxt = `+${r.data.inFlow}/-${r.data.outFlow}`;
+                return `<div class="space-y-0.5">
+                    <div class="flex justify-between text-[10px]">
+                        <span>${r.icon} ${r.label}</span>
+                        <span class="text-slate-300">${dash.sandboxMode ? '∞' : `${r.data.current} / ${r.data.cap}`} <span class="text-slate-400 ml-1">(${flowTxt})</span></span>
+                    </div>
+                    <div class="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div class="h-full ${r.bar} rounded-full" style="width:${pct}%"></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        if (contractsEl) {
+            const activeHtml = dash.contracts.active.map(c => `
+                <div class="bg-emerald-500/10 border border-emerald-400/30 rounded-xl p-2 space-y-0.5">
+                    <div class="flex justify-between items-center gap-2">
+                        <span class="font-semibold text-emerald-200">📌 ${c.title}</span>
+                        <span class="text-[10px] text-yellow-300">+${c.reward}🪙</span>
+                    </div>
+                    <div class="text-[10px] text-slate-300">${c.client} · Progresso: ${c.progress.current}/${c.progress.target}</div>
+                </div>
+            `).join('');
+            const availHtml = dash.contracts.available.slice(0, 3).map(c => `
+                <div class="bg-white/5 border border-white/10 rounded-xl p-2 space-y-1">
+                    <div class="flex justify-between items-center gap-2">
+                        <span class="font-semibold text-slate-100">${c.title}</span>
+                        <button onclick="acceptCityContract('${c.id}')" class="px-2 py-0.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-semibold">Aceitar (+${c.advance}🪙)</button>
+                    </div>
+                    <div class="text-[10px] text-slate-400">${c.client} · Final: +${c.reward}🪙</div>
+                </div>
+            `).join('');
+            contractsEl.innerHTML = (activeHtml + availHtml) || '<div class="text-[10px] text-slate-400">Todos os contratos da fase concluídos! 🏆</div>';
+        }
+        const journalEl = document.getElementById('economy-journal-list');
+        const journalCountEl = document.getElementById('economy-journal-count');
+        const journalBadge = document.getElementById('journal-btn-label');
+        const fullJournal = MO.economyManager.getJournal ? MO.economyManager.getJournal(25) : (dash.journal || []);
+        if (journalCountEl) journalCountEl.textContent = `${fullJournal.length} evento(s)`;
+        if (journalBadge) journalBadge.textContent = String(fullJournal.length);
+        if (journalEl) {
+            journalEl.innerHTML = fullJournal.length > 0
+                ? fullJournal.map(ev => `
+                    <div class="bg-white/5 rounded-xl px-2.5 py-1.5 flex items-start gap-2 border border-white/5">
+                        <span class="text-sm shrink-0">${ev.icon}</span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex justify-between gap-1.5">
+                                <span class="font-semibold text-slate-100 truncate">${ev.title}</span>
+                                <span class="text-[9px] text-sky-300/80 shrink-0">${ev.time}</span>
+                            </div>
+                            ${ev.detail ? `<div class="text-[10px] text-slate-400 truncate">${ev.detail}</div>` : ''}
+                        </div>
+                    </div>
+                `).join('')
+                : '<div class="text-slate-400 text-[11px] py-2">Nenhum evento registrado ainda. Comece abrindo estradas ou construindo!</div>';
+        }
     };
 
     MO.setCityBuildTool = function(toolId) {
@@ -387,6 +583,30 @@
         if (MO.clearCitySelection) MO.clearCitySelection();
         if (MO.syncPhaseUI) MO.syncPhaseUI();
         if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
+    };
+
+    MO.startChilloutFromMenu = function() {
+        const nameEl = document.getElementById('setup-sup-name');
+        const seedEl = document.getElementById('setup-seed');
+        const biomeEl = document.getElementById('setup-biome');
+        const supName = nameEl && nameEl.value ? nameEl.value.trim() : 'Supervisor Beto';
+        const seed = seedEl && seedEl.value ? Number(seedEl.value) : MO.state.seed;
+        const biome = biomeEl && biomeEl.value ? biomeEl.value : 'forest';
+        if (MO.chilloutManager && MO.chilloutManager.startChilloutGame) {
+            MO.chilloutManager.startChilloutGame({ supervisorName: supName, seed, biome, sandboxMode: false });
+        }
+        const modal = document.getElementById('city-setup-modal');
+        if (modal) modal.classList.add('hidden');
+        if (MO.clearCitySelection) MO.clearCitySelection();
+        if (MO.syncPhaseUI) MO.syncPhaseUI();
+        if (MO.renderNpcRosterUI) MO.renderNpcRosterUI();
+    };
+
+    MO.toggleChilloutMode = function(forceVal) {
+        if (MO.chilloutManager && MO.chilloutManager.toggleChilloutMode) {
+            return MO.chilloutManager.toggleChilloutMode(forceVal);
+        }
+        return false;
     };
 
     MO.selectTool = function(tool) {

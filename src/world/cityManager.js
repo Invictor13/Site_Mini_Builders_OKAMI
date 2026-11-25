@@ -18,7 +18,14 @@
         bridge: { wood: 5, stone: 5, iron: 3, coins: 8 },
         tower: { wood: 4, stone: 4, iron: 5, coins: 10 },
         farm: { wood: 3, stone: 0, iron: 0, coins: 4 },
+        'farm-plot': { wood: 0, stone: 0, iron: 0, coins: 0 },
+        'farm-well': { wood: 1, stone: 2, iron: 0, coins: 0 },
+        'farm-bench': { wood: 2, stone: 0, iron: 0, coins: 1 },
+        'farm-barn': { wood: 3, stone: 2, iron: 0, coins: 3 },
         lumberyard: { wood: 2, stone: 0, iron: 0, coins: 3 },
+        woodshop: { wood: 2, stone: 0, iron: 0, coins: 2 },
+        crusher: { wood: 1, stone: 2, iron: 0, coins: 2 },
+        'mineral-depot': { wood: 2, stone: 3, iron: 0, coins: 3 },
         mine: { wood: 3, stone: 2, iron: 0, coins: 5 },
         market: { wood: 4, stone: 2, iron: 0, coins: 6 }
     };
@@ -39,7 +46,14 @@
         bridge: { w: 6.2, h: 1.2, d: 2.6 },
         tower: { w: 2.8, h: 4.2, d: 2.8 },
         farm: { w: 2.8, h: 0.45, d: 2.6 },
+        'farm-plot': { w: 1.65, h: 0.25, d: 1.65 },
+        'farm-well': { w: 1.65, h: 1.6, d: 1.65 },
+        'farm-bench': { w: 1.85, h: 1.0, d: 1.05 },
+        'farm-barn': { w: 4.3, h: 2.8, d: 3.3 },
         lumberyard: { w: 2.6, h: 1.25, d: 2.4 },
+        woodshop: { w: 4.1, h: 2.5, d: 3.1 },
+        crusher: { w: 1.9, h: 1.5, d: 1.1 },
+        'mineral-depot': { w: 4.3, h: 2.7, d: 3.3 },
         mine: { w: 2.6, h: 1.25, d: 2.4 },
         market: { w: 2.6, h: 1.4, d: 2.2 }
     };
@@ -55,6 +69,98 @@
     let dragState = { active: false, startCell: null, endCell: null, tool: null };
     let seqCounter = 1;
     const roadMeshMap = new Map();
+    let sharedRoadAssets = null;
+    let sharedPropAssets = null;
+
+    function getSharedRoadAssets() {
+        if (sharedRoadAssets) return sharedRoadAssets;
+        sharedRoadAssets = {
+            markGeo: new THREE.BoxGeometry(1.18, 0.03, 1.18),
+            markMat: new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.38 }),
+            curbGeo: new THREE.BoxGeometry(1.58, 0.055, 1.58),
+            asphaltGeo: new THREE.BoxGeometry(1.26, 0.072, 1.26),
+            asphaltMat: new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.80 }),
+            dashHGeo: new THREE.BoxGeometry(0.44, 0.080, 0.075),
+            dashVGeo: new THREE.BoxGeometry(0.075, 0.080, 0.44),
+            dashMat: new THREE.MeshBasicMaterial({ color: 0xf1f5f9 }),
+            dirtGeo: new THREE.BoxGeometry(1.56, 0.048, 1.56),
+            dirtMats: [
+                new THREE.MeshStandardMaterial({ color: 0x8c6844, roughness: 0.96 }),
+                new THREE.MeshStandardMaterial({ color: 0x825f3e, roughness: 0.97 }),
+                new THREE.MeshStandardMaterial({ color: 0x94704b, roughness: 0.95 })
+            ],
+            trackHGeo: new THREE.BoxGeometry(1.48, 0.056, 0.16),
+            trackVGeo: new THREE.BoxGeometry(0.16, 0.056, 1.48),
+            trackMat: new THREE.MeshStandardMaterial({ color: 0x67492f, roughness: 0.98 }),
+            edgePebbleGeo: new THREE.DodecahedronGeometry(0.09, 0),
+            lampPostGeo: new THREE.CylinderGeometry(0.028, 0.04, 1.45, 6),
+            lampArmGeo: new THREE.BoxGeometry(0.24, 0.04, 0.04),
+            lampBulbGeo: new THREE.SphereGeometry(0.085, 7, 6),
+            lampBulbMat: new THREE.MeshStandardMaterial({
+                color: 0xfef3c7,
+                emissive: 0xf59e0b,
+                emissiveIntensity: 0.25,
+                roughness: 0.3
+            })
+        };
+        if (MO.resources) {
+            MO.resources.protect(
+                sharedRoadAssets.markGeo, sharedRoadAssets.markMat,
+                sharedRoadAssets.curbGeo, sharedRoadAssets.asphaltGeo, sharedRoadAssets.asphaltMat,
+                sharedRoadAssets.dashHGeo, sharedRoadAssets.dashVGeo, sharedRoadAssets.dashMat,
+                sharedRoadAssets.dirtGeo, ...sharedRoadAssets.dirtMats,
+                sharedRoadAssets.trackHGeo, sharedRoadAssets.trackVGeo, sharedRoadAssets.trackMat,
+                sharedRoadAssets.edgePebbleGeo, sharedRoadAssets.lampPostGeo, sharedRoadAssets.lampArmGeo,
+                sharedRoadAssets.lampBulbGeo, sharedRoadAssets.lampBulbMat
+            );
+        }
+        return sharedRoadAssets;
+    }
+
+    function getSharedPropAssets() {
+        if (sharedPropAssets) return sharedPropAssets;
+        sharedPropAssets = {
+            barrelGeo: new THREE.CylinderGeometry(0.14, 0.15, 0.34, 8),
+            crateGeo: new THREE.BoxGeometry(0.30, 0.24, 0.28),
+            fencePostGeo: new THREE.BoxGeometry(0.06, 0.42, 0.06),
+            fenceRailGeo: new THREE.BoxGeometry(0.75, 0.05, 0.04),
+            produceGeo: new THREE.SphereGeometry(0.075, 6, 5),
+            cropMats: [
+                new THREE.MeshStandardMaterial({ color: 0x4d7c0f, roughness: 0.90 }),
+                new THREE.MeshStandardMaterial({ color: 0x65a30d, roughness: 0.88 }),
+                new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.84 })
+            ],
+            awningRedMat: new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.62 }),
+            awningCreamMat: new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.70 }),
+            produceMats: [
+                new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.6 }),
+                new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.6 }),
+                new THREE.MeshStandardMaterial({ color: 0x84cc16, roughness: 0.65 }),
+                new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.6 })
+            ],
+            waterMat: new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.25, metalness: 0.2 }),
+            strawMat: new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.92 }),
+            ironGlowMat: new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.72, roughness: 0.30 })
+        };
+        if (MO.resources) {
+            MO.resources.protect(
+                sharedPropAssets.barrelGeo, sharedPropAssets.crateGeo,
+                sharedPropAssets.fencePostGeo, sharedPropAssets.fenceRailGeo, sharedPropAssets.produceGeo,
+                ...sharedPropAssets.cropMats,
+                sharedPropAssets.awningRedMat, sharedPropAssets.awningCreamMat,
+                ...sharedPropAssets.produceMats,
+                sharedPropAssets.waterMat, sharedPropAssets.strawMat, sharedPropAssets.ironGlowMat
+            );
+        }
+        return sharedPropAssets;
+    }
+
+    function updateCityStreetLights(isNight) {
+        if (sharedRoadAssets && sharedRoadAssets.lampBulbMat) {
+            sharedRoadAssets.lampBulbMat.emissiveIntensity = isNight ? 2.2 : 0.2;
+        }
+    }
+    MO.updateCityStreetLights = updateCityStreetLights;
 
     function getEconomy() {
         return MO.state && MO.state.economy ? MO.state.economy : null;
@@ -70,9 +176,14 @@
         const eco = getEconomy();
         if (!eco || eco.sandboxMode || !cost) return true;
         if (!canAfford(cost)) return false;
+        const outDelta = {};
         ['wood', 'stone', 'iron', 'food', 'coins'].forEach(k => {
-            if (cost[k]) eco[k] = Math.max(0, eco[k] - cost[k]);
+            if (cost[k]) {
+                eco[k] = Math.max(0, eco[k] - cost[k]);
+                outDelta[k] = -cost[k];
+            }
         });
+        if (MO.economyManager && MO.economyManager.recordFlow) MO.economyManager.recordFlow(outDelta);
         syncEconomyUI();
         return true;
     }
@@ -80,9 +191,13 @@
     function addResources(delta) {
         const eco = getEconomy();
         if (!eco || !delta) return;
-        ['wood', 'stone', 'iron', 'food', 'coins'].forEach(k => {
-            if (delta[k]) eco[k] = Math.max(0, eco[k] + delta[k]);
-        });
+        if (MO.economyManager && MO.economyManager.addResourcesWithCaps) {
+            MO.economyManager.addResourcesWithCaps(delta);
+        } else {
+            ['wood', 'stone', 'iron', 'food', 'coins'].forEach(k => {
+                if (delta[k]) eco[k] = Math.max(0, eco[k] + delta[k]);
+            });
+        }
         syncEconomyUI();
     }
 
@@ -119,6 +234,21 @@
         if (dot) {
             const lowRes = !eco.sandboxMode && (eco.wood <= 1 || eco.stone <= 1);
             dot.classList.toggle('hidden', !lowRes);
+        }
+        if (MO.economyManager) {
+            const dash = MO.economyManager.getDashboardSummary();
+            const netEl = document.getElementById('eco-net-cycle');
+            if (netEl) {
+                const n = dash.netPerCycle || 0;
+                netEl.textContent = eco.sandboxMode ? 'Livre' : `${n >= 0 ? '+' : ''}${n}/c`;
+                netEl.classList.toggle('text-emerald-300', n >= 0 && !eco.sandboxMode);
+                netEl.classList.toggle('text-rose-300', n < 0 && !eco.sandboxMode);
+            }
+            const popEl = document.getElementById('eco-pop');
+            if (popEl) {
+                popEl.textContent = `${dash.residents}/${dash.housingCapacity}`;
+            }
+            if (MO.renderEconomyPanelUI) MO.renderEconomyPanelUI();
         }
     }
 
@@ -187,7 +317,14 @@
             bridge: '🌉 Ponte sobre Rio (clique próximo à água)',
             tower: '🗼 Torre / Farol (clique onde construir)',
             farm: '🌾 Fazenda (produz Comida · clique no mapa)',
+            'farm-plot': '🌱 Bloco de Lavoura Contígua (encaixa até 12 blocos)',
+            'farm-well': '🪣 Poço d\'Água (3 etapas · irrigação da lavoura)',
+            'farm-bench': '🧺 Bancada de Triagem (3 peças · embala colheitas)',
+            'farm-barn': '🏡 Celeiro & Feira Agrícola (14 peças · Silo + 12 caixotes)',
             lumberyard: '🪵 Serraria (produz Madeira · clique no mapa)',
+            woodshop: '🏪 Madeireira (montada peça por peça · 12 expositores)',
+            crusher: '⚙️ Britador / Serra Diamantada (3 peças · lapida pedras e minérios)',
+            'mineral-depot': '🏛️ Pedreira & Fundição (16 peças · 12 expositores · chaminé)',
             mine: '⛏️ Mina / Pedreira (produz Pedra/Ferro)',
             market: '🏪 Mercado (Comerciante gera Moedas)'
         };
@@ -217,45 +354,70 @@
         const hasE = city && city.roadTiles.has(`${tile.gx + 1},${tile.gz}`);
         const verticalFlow = (hasN || hasS) && !(hasW || hasE);
 
+        const R = getSharedRoadAssets();
+        const tileHash = Math.abs((tile.gx * 73 + tile.gz * 137) % 100);
+        const isIntersection = (hasN || hasS) && (hasW || hasE);
+
         if (!tile.built) {
-            const mark = new THREE.Mesh(
-                new THREE.BoxGeometry(1.18, 0.03, 1.18),
-                new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.38 })
-            );
+            const mark = new THREE.Mesh(R.markGeo, R.markMat);
             mark.position.y = 0.02;
             g.add(mark);
         } else if (tile.kind === 'paved') {
-            const curb = new THREE.Mesh(
-                new THREE.BoxGeometry(1.56, 0.06, 1.56),
-                MO.mats.concrete || MO.mats.stone
-            );
-            curb.position.y = 0.03;
+            const curb = new THREE.Mesh(R.curbGeo, MO.mats.concrete || MO.mats.stone);
+            curb.position.y = 0.028;
             curb.receiveShadow = true;
-            const asphalt = new THREE.Mesh(
-                new THREE.BoxGeometry(1.26, 0.075, 1.26),
-                new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.78 })
-            );
-            asphalt.position.y = 0.04;
+            const asphalt = new THREE.Mesh(R.asphaltGeo, R.asphaltMat);
+            asphalt.position.y = 0.038;
             asphalt.receiveShadow = true;
-            const dash = new THREE.Mesh(
-                new THREE.BoxGeometry(verticalFlow ? 0.08 : 0.44, 0.082, verticalFlow ? 0.44 : 0.08),
-                new THREE.MeshBasicMaterial({ color: 0xf8fafc })
-            );
-            dash.position.y = 0.042;
-            g.add(curb, asphalt, dash);
+            g.add(curb, asphalt);
+            if (!isIntersection) {
+                const dash = new THREE.Mesh(verticalFlow ? R.dashVGeo : R.dashHGeo, R.dashMat);
+                dash.position.y = 0.042;
+                g.add(dash);
+            }
+            // Poste urbano elegante a cada 4 metros de rua pavimentada (acende à noite!)
+            if (Math.abs(tile.gx + tile.gz) % 4 === 0) {
+                const sideX = verticalFlow ? 0.72 : 0.0;
+                const sideZ = verticalFlow ? 0.0 : -0.72;
+                const post = new THREE.Mesh(R.lampPostGeo, MO.mats.steel);
+                post.position.set(sideX, 0.72, sideZ);
+                post.castShadow = true;
+                const arm = new THREE.Mesh(R.lampArmGeo, MO.mats.steel);
+                arm.position.set(sideX + (verticalFlow ? -0.10 : 0), 1.40, sideZ + (verticalFlow ? 0 : 0.10));
+                if (!verticalFlow) arm.rotation.y = Math.PI / 2;
+                const bulb = new THREE.Mesh(R.lampBulbGeo, R.lampBulbMat);
+                bulb.position.set(sideX + (verticalFlow ? -0.20 : 0), 1.35, sideZ + (verticalFlow ? 0 : 0.20));
+                g.add(post, arm, bulb);
+            }
         } else {
-            const dirtBed = new THREE.Mesh(
-                new THREE.BoxGeometry(1.52, 0.055, 1.52),
-                new THREE.MeshStandardMaterial({ color: 0x8c6844, roughness: 0.96 })
-            );
-            dirtBed.position.y = 0.025;
+            // Estrada de terra natural com variação sutil de cor, marcas de roda orgânicas e pedrinhas de borda
+            const dirtMat = R.dirtMats[tileHash % R.dirtMats.length];
+            const dirtBed = new THREE.Mesh(R.dirtGeo, dirtMat);
+            dirtBed.position.y = 0.024;
+            dirtBed.rotation.y = ((tileHash % 7) - 3) * 0.018;
             dirtBed.receiveShadow = true;
-            const trackMat = new THREE.MeshStandardMaterial({ color: 0x6b4d32, roughness: 0.98 });
-            const t1 = new THREE.Mesh(new THREE.BoxGeometry(verticalFlow ? 0.16 : 1.46, 0.06, verticalFlow ? 1.46 : 0.16), trackMat);
-            t1.position.set(verticalFlow ? -0.26 : 0, 0.028, verticalFlow ? 0 : -0.26);
-            const t2 = new THREE.Mesh(new THREE.BoxGeometry(verticalFlow ? 0.16 : 1.46, 0.06, verticalFlow ? 1.46 : 0.16), trackMat);
-            t2.position.set(verticalFlow ? 0.26 : 0, 0.028, verticalFlow ? 0 : 0.26);
+            const jitter = ((tileHash % 5) - 2) * 0.022;
+            const t1 = new THREE.Mesh(verticalFlow ? R.trackVGeo : R.trackHGeo, R.trackMat);
+            t1.position.set(verticalFlow ? (-0.26 + jitter) : 0, 0.028, verticalFlow ? 0 : (-0.26 + jitter));
+            const t2 = new THREE.Mesh(verticalFlow ? R.trackVGeo : R.trackHGeo, R.trackMat);
+            t2.position.set(verticalFlow ? (0.26 + jitter) : 0, 0.028, verticalFlow ? 0 : (0.26 + jitter));
             g.add(dirtBed, t1, t2);
+
+            // Pedrinhas naturais nas bordas para suavizar a transição com a grama
+            if (tileHash % 2 === 0) {
+                const p1 = new THREE.Mesh(R.edgePebbleGeo, MO.mats.stone);
+                p1.position.set(verticalFlow ? 0.68 : (jitter * 8), 0.04, verticalFlow ? (jitter * 8) : 0.68);
+                p1.scale.set(1.25, 0.55, 1.0);
+                p1.rotation.y = tileHash;
+                g.add(p1);
+            }
+            if (tileHash % 3 === 0) {
+                const p2 = new THREE.Mesh(R.edgePebbleGeo, MO.mats.stone);
+                p2.position.set(verticalFlow ? -0.70 : (-jitter * 7), 0.04, verticalFlow ? (-jitter * 7) : -0.70);
+                p2.scale.set(1.1, 0.5, 0.9);
+                p2.rotation.y = tileHash * 0.7;
+                g.add(p2);
+            }
         }
         MO.groups.cityInfra.add(g);
         roadMeshMap.set(key, g);
@@ -277,6 +439,7 @@
         if (MO.chunkManager) {
             MO.chunkManager.paintLevelArea(tile.x, tile.z, 1.5, 0.9, MO.PLATEAU_Y);
             MO.chunkManager.paintRoadCell(tile.x, tile.z, kind, instantOrQueued, 1);
+            if (MO.chunkManager.clearNatureInArea) MO.chunkManager.clearNatureInArea(tile.x, tile.z, 1.25);
         }
         renderCityRoadTile(tile);
         if (MO.state.villageInfra && MO.state.villageInfra.roadSegments) {
@@ -308,38 +471,143 @@
         const builtGroup = new THREE.Group();
         builtGroup.visible = built;
 
+        const P = getSharedPropAssets();
+        const R = getSharedRoadAssets();
+        const cropMeshes = [];
+
         if (kind === 'farm') {
+            // 3 canteiros com plantações que crescem em etapas (broto -> verde -> dourado)
             for (let r = -1; r <= 1; r++) {
-                const row = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.10, 0.36), MO.mats.wood);
-                row.position.set(0, 0.10, r * 0.65);
-                const crops = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.22, 0.24), new THREE.MeshStandardMaterial({ color: 0x65a30d, roughness: 0.9 }));
-                crops.position.set(0, 0.24, r * 0.65);
+                const row = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.10, 0.38), MO.mats.wood);
+                row.position.set(-0.12, 0.10, r * 0.64);
+                row.receiveShadow = true;
+                const crops = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.26, 0.26), P.cropMats[1]);
+                crops.position.set(-0.12, 0.24, r * 0.64);
+                crops.castShadow = true;
+                cropMeshes.push(crops);
                 builtGroup.add(row, crops);
             }
+            // Cerca rústica nos fundos e laterais
+            [[-1.24, -1.18], [0, -1.18], [1.24, -1.18], [-1.24, 0], [-1.24, 1.18]].forEach(([fx, fz]) => {
+                const post = new THREE.Mesh(P.fencePostGeo, MO.mats.trunkWood);
+                post.position.set(fx, 0.22, fz);
+                post.castShadow = true;
+                builtGroup.add(post);
+            });
+            const railBack = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.05, 0.04), MO.mats.wood);
+            railBack.position.set(0, 0.30, -1.18);
+            const railSide = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 2.36), MO.mats.wood);
+            railSide.position.set(-1.24, 0.30, 0);
+            // Barril de irrigação + água azul
+            const trough = new THREE.Mesh(P.barrelGeo, MO.mats.doorWood);
+            trough.position.set(1.06, 0.22, -0.82);
+            trough.castShadow = true;
+            const waterTop = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 8), P.waterMat);
+            waterTop.position.set(1.06, 0.38, -0.82);
+            // Espantalho simpático low-poly
+            const scPost = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.92, 5), MO.mats.trunkWood);
+            scPost.position.set(1.02, 0.48, 0.72);
+            const scArms = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.04, 0.04), MO.mats.trunkWood);
+            scArms.position.set(1.02, 0.72, 0.72);
+            const scHat = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.14, 6), P.strawMat);
+            scHat.position.set(1.02, 0.98, 0.72);
+            builtGroup.add(railBack, railSide, trough, waterTop, scPost, scArms, scHat);
         } else if (kind === 'lumberyard') {
-            const shed = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.0, 1.4), MO.mats.doorWood);
-            shed.position.set(0, 0.55, 0);
-            const roof = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.14, 1.7), MO.mats.roofTile);
-            roof.position.set(0, 1.12, 0);
-            builtGroup.add(shed, roof);
+            // Galpão aberto com 4 pilares, telhado inclinado, mesa de serra circular e pilhas de toras/tábuas
+            [[-0.95, -0.72], [0.95, -0.72], [-0.95, 0.72], [0.95, 0.72]].forEach(([px, pz]) => {
+                const post = new THREE.Mesh(new THREE.BoxGeometry(0.10, 1.15, 0.10), MO.mats.trunkWood);
+                post.position.set(px, 0.62, pz);
+                post.castShadow = true;
+                builtGroup.add(post);
+            });
+            const roof = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.12, 1.85), MO.mats.roofTile);
+            roof.position.set(0, 1.24, 0);
+            roof.rotation.x = 0.10;
+            roof.castShadow = true;
+            const sawTable = new THREE.Mesh(new THREE.BoxGeometry(1.10, 0.48, 0.56), MO.mats.wood);
+            sawTable.position.set(0, 0.30, 0);
+            sawTable.castShadow = true;
+            const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.025, 10), MO.mats.steel);
+            blade.rotation.z = Math.PI / 2;
+            blade.position.set(0, 0.56, 0);
+            // Pilha de toras na esquerda e tábuas prontas na direita
+            for (let k = 0; k < 3; k++) {
+                const log = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.085, 0.85, 6), MO.mats.trunkWood);
+                log.rotation.x = Math.PI / 2;
+                log.position.set(-0.92 + (k % 2) * 0.16, 0.16 + Math.floor(k / 2) * 0.14, 0.75);
+                log.castShadow = true;
+                builtGroup.add(log);
+            }
+            for (let k = 0; k < 3; k++) {
+                const plank = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.06, 0.24), MO.mats.formwork);
+                plank.position.set(0.86, 0.14 + k * 0.075, 0.72);
+                plank.castShadow = true;
+                builtGroup.add(plank);
+            }
+            const barrel = new THREE.Mesh(P.barrelGeo, MO.mats.doorWood);
+            barrel.position.set(-0.95, 0.22, -0.82);
+            builtGroup.add(roof, sawTable, blade, barrel);
         } else if (kind === 'mine') {
-            const frame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 1.2), MO.mats.stone);
-            frame.position.set(0, 0.58, -0.2);
-            const cart = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.40, 0.55), MO.mats.steel);
-            cart.position.set(0.35, 0.28, 0.65);
-            builtGroup.add(frame, cart);
+            const frame = new THREE.Mesh(new THREE.DodecahedronGeometry(0.92, 0), MO.mats.stone);
+            frame.position.set(0, 0.54, -0.35);
+            frame.scale.set(1.25, 0.92, 0.95);
+            frame.castShadow = true;
+            const postL = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.92, 0.10), MO.mats.trunkWood);
+            postL.position.set(-0.46, 0.50, 0.36);
+            const postR = postL.clone(); postR.position.x = 0.46;
+            const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.11, 0.14), MO.mats.trunkWood);
+            lintel.position.set(0, 0.95, 0.36);
+            const cart = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.36, 0.52), MO.mats.steel);
+            cart.position.set(0.28, 0.26, 0.78);
+            cart.castShadow = true;
+            const ore = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), P.ironGlowMat);
+            ore.position.set(0.28, 0.48, 0.78);
+            const lamp = new THREE.Mesh(R.lampBulbGeo, R.lampBulbMat);
+            lamp.position.set(-0.46, 0.92, 0.46);
+            builtGroup.add(frame, postL, postR, lintel, cart, ore, lamp);
         } else if (kind === 'market') {
-            const stall = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.72, 1.2), MO.mats.doorWood);
-            stall.position.set(0, 0.40, 0);
-            const awning = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.14, 1.5), new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.6 }));
-            awning.position.set(0, 1.25, 0.1);
-            awning.rotation.x = 0.18;
-            builtGroup.add(stall, awning);
+            // Barraca de mercado com toldo listrado, caixotes coloridos, barris e lampião quente!
+            [[-1.0, -0.58], [1.0, -0.58], [-1.0, 0.58], [1.0, 0.58]].forEach(([px, pz]) => {
+                const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.24, 0.08), MO.mats.trunkWood);
+                post.position.set(px, 0.66, pz);
+                post.castShadow = true;
+                builtGroup.add(post);
+            });
+            const counter = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.62, 0.74), MO.mats.doorWood);
+            counter.position.set(0, 0.36, 0.05);
+            counter.castShadow = true;
+            // Toldo listrado vermelho & creme
+            for (let s = 0; s < 5; s++) {
+                const strip = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.46, 0.09, 1.55),
+                    s % 2 === 0 ? P.awningRedMat : P.awningCreamMat
+                );
+                strip.position.set(-0.92 + s * 0.46, 1.30, 0.06);
+                strip.rotation.x = 0.18;
+                strip.castShadow = true;
+                builtGroup.add(strip);
+            }
+            // Caixotes de frutas/produtos coloridos no balcão
+            for (let c = 0; c < 4; c++) {
+                const cx = -0.66 + c * 0.44;
+                const crate = new THREE.Mesh(P.crateGeo, MO.mats.wood);
+                crate.position.set(cx, 0.76, 0.14);
+                const prod = new THREE.Mesh(P.produceGeo, P.produceMats[c % P.produceMats.length]);
+                prod.position.set(cx, 0.89, 0.14);
+                prod.scale.set(1.3, 0.85, 1.15);
+                builtGroup.add(crate, prod);
+            }
+            // Barris e lampião noturno ao lado da barraca
+            const barrel = new THREE.Mesh(P.barrelGeo, MO.mats.doorWood);
+            barrel.position.set(-1.12, 0.22, 0.76);
+            const lamp = new THREE.Mesh(R.lampBulbGeo, R.lampBulbMat);
+            lamp.position.set(0.95, 1.15, 0.66);
+            builtGroup.add(counter, barrel, lamp);
         }
 
         g.add(builtGroup);
         if (MO.groups && MO.groups.cityInfra) MO.groups.cityInfra.add(g);
-        return { root: g, guide, builtGroup };
+        return { root: g, guide, builtGroup, cropMeshes };
     }
 
     function getStraightLineCells(sCell, eCell) {
@@ -427,6 +695,55 @@
             if (MO.showToast) MO.showToast(instant ? '💡 Refletor instalado!' : '💡 Refletor demarcado!', '💡');
             return { kind: 'floodlight', x: pt.x, z: pt.z };
         }
+        if (kind === 'woodshop') {
+            if (MO.forestryManager && MO.forestryManager.placeWoodshop) {
+                MO.forestryManager.placeWoodshop(pt.x, pt.z, { instantBuilt: false });
+            }
+            saveCityState();
+            return { kind: 'woodshop', x: pt.x, z: pt.z };
+        }
+        if (kind === 'crusher') {
+            if (MO.miningManager && MO.miningManager.placeCrusher) {
+                MO.miningManager.placeCrusher(pt.x, pt.z, { instantBuilt: false });
+            }
+            saveCityState();
+            return { kind: 'crusher', x: pt.x, z: pt.z };
+        }
+        if (kind === 'mineral-depot') {
+            if (MO.miningManager && MO.miningManager.placeDepot) {
+                MO.miningManager.placeDepot(pt.x, pt.z, { instantBuilt: false });
+            }
+            saveCityState();
+            return { kind: 'mineral-depot', x: pt.x, z: pt.z };
+        }
+        if (kind === 'farm-plot') {
+            if (MO.farmingManager && MO.farmingManager.expandContiguousField) {
+                MO.farmingManager.expandContiguousField(pt);
+            }
+            saveCityState();
+            return { kind: 'farm-plot', x: pt.x, z: pt.z };
+        }
+        if (kind === 'farm-well') {
+            if (MO.farmingManager && MO.farmingManager.placeWell) {
+                MO.farmingManager.placeWell(pt.x, pt.z, { instantBuilt: false });
+            }
+            saveCityState();
+            return { kind: 'farm-well', x: pt.x, z: pt.z };
+        }
+        if (kind === 'farm-bench') {
+            if (MO.farmingManager && MO.farmingManager.placeBench) {
+                MO.farmingManager.placeBench(pt.x, pt.z, { instantBuilt: false });
+            }
+            saveCityState();
+            return { kind: 'farm-bench', x: pt.x, z: pt.z };
+        }
+        if (kind === 'farm-barn') {
+            if (MO.farmingManager && MO.farmingManager.placeBarn) {
+                MO.farmingManager.placeBarn(pt.x, pt.z, { instantBuilt: false });
+            }
+            saveCityState();
+            return { kind: 'farm-barn', x: pt.x, z: pt.z };
+        }
 
         const builtNow = Boolean(MO.state.economy.sandboxMode);
         const visuals = createStructureMesh(kind, pt.x, pt.z, builtNow);
@@ -438,14 +755,18 @@
             built: builtNow,
             res: false,
             prodTimer: 0,
+            cropStage: 1,
             mesh: visuals.root,
             guide: visuals.guide,
-            builtGroup: visuals.builtGroup
+            builtGroup: visuals.builtGroup,
+            cropMeshes: visuals.cropMeshes || []
         };
         MO.state.city.structures.push(rec);
         MO.paintLevelWeight(pt.x, pt.z, 1.6, 0.9);
+        if (MO.chunkManager && MO.chunkManager.clearNatureInArea) MO.chunkManager.clearNatureInArea(pt.x, pt.z, 2.2);
         MO.updateTerrainGeometry();
         if (MO.SoundFX && MO.SoundFX.playHammerWood) MO.SoundFX.playHammerWood();
+        if (MO.economyManager && MO.economyManager.evaluateContracts) MO.economyManager.evaluateContracts();
         saveCityState();
         if (MO.showToast) MO.showToast(`${kind.toUpperCase()} demarcado na cidade! Trabalhadores irão construir.`, '🏗️');
         return rec;
@@ -511,9 +832,16 @@
         }
 
         MO.paintLevelWeight(ox, oz, Math.max(halfW, halfD) + 0.8, 0.95);
+        if (MO.chunkManager && MO.chunkManager.clearNatureInArea) MO.chunkManager.clearNatureInArea(ox, oz, Math.max(halfW, halfD) + 1.2);
         MO.updateTerrainGeometry();
 
         if (targetMode === 'house') {
+            // Identidade procedural única para cada casa (paleta de cor + variação arquitetônica por seed/lote)
+            const housePalettes = ['#f1f5f9', '#dfd3be', '#c9866b', '#8fa893', '#e6c999', '#cbd5e1'];
+            const houseVariants = ['L-shape', 'compact', 'modern'];
+            const styleIdx = Math.abs((state.seed || 1) + seqCounter * 7);
+            state.paintColorHex = housePalettes[styleIdx % housePalettes.length];
+            state.variant = houseVariants[styleIdx % houseVariants.length];
             if (MO.modes.house && MO.modes.house.onInit) MO.modes.house.onInit();
             if (customCells && customCells.size > 0) {
                 state.occupiedCells = new Set(customCells);
@@ -540,7 +868,8 @@
     }
 
     const SUPPORT_AND_PROD_TOOLS = new Set([
-        'farm', 'lumberyard', 'mine', 'market',
+        'farm', 'farm-plot', 'farm-well', 'farm-bench', 'farm-barn',
+        'lumberyard', 'woodshop', 'crusher', 'mineral-depot', 'mine', 'market',
         'unloading', 'mixer', 'workbench', 'mess-hall', 'tent', 'floodlight', 'stockyard'
     ]);
 
@@ -661,6 +990,8 @@
         state.cityMode = true;
         state.city.playerDriven = true;
         state.city.setupConfirmed = true;
+        state.city.chilloutMode = false;
+        state.city.chilloutStage = '';
         state.city.activeBuildTool = null;
         state.city.activeCategory = null;
         state.city.roadTiles.clear();
@@ -681,6 +1012,10 @@
         state.economy.iron = 0;
         state.economy.food = 18;
         state.economy.coins = 90;
+        if (MO.economyManager && MO.economyManager.reset) MO.economyManager.reset();
+        if (MO.economyManager && MO.economyManager.logJournal) {
+            MO.economyManager.logJournal('🌍', `Comunidade fundada por ${supName}`, `Seed #${state.seed} · Bioma ${state.biome}`);
+        }
 
         MO.STATION_TOOLBOX = { x: -2.2, z: 2.0 };
         if (state.villageInfra) {
@@ -714,7 +1049,18 @@
         if (MO.worldManager && MO.worldManager.initDefaultWorld && opts.keepStarterLots) {
             MO.worldManager.initDefaultWorld();
         }
-        if (MO.chunkManager) MO.chunkManager.init();
+        if (MO.chunkManager) {
+            MO.chunkManager.init();
+            if (MO.chunkManager.getHighwayCenterX) {
+                const entryX = MO.chunkManager.getHighwayCenterX(2.0, state.seed) + 4.2;
+                MO.STATION_TOOLBOX = { x: entryX, z: 2.0 };
+            }
+        }
+        if (MO.trafficManager && MO.trafficManager.reset) MO.trafficManager.reset();
+        if (MO.trafficManager && MO.trafficManager.init) MO.trafficManager.init();
+        if (MO.forestryManager && MO.forestryManager.reset) MO.forestryManager.reset();
+        if (MO.miningManager && MO.miningManager.reset) MO.miningManager.reset();
+        if (MO.farmingManager && MO.farmingManager.reset) MO.farmingManager.reset();
         if (MO.initToolbox) MO.initToolbox();
         if (MO.rebuildSiteProps) MO.rebuildSiteProps(true);
         if (MO.rebuildCamp) MO.rebuildCamp(true);
@@ -739,12 +1085,12 @@
             MO.workerFactory.syncNpcUI();
         }
 
-        if (MO.focusCameraOn) MO.focusCameraOn(0, 0, 23.5);
+        if (MO.focusCameraOn) MO.focusCameraOn(-5.5, 1.0, 28.0);
         syncEconomyUI();
         const modal = document.getElementById('city-setup-modal');
         if (modal) modal.classList.add('hidden');
         if (!opts.skipSave) saveCityState();
-        if (MO.showToast) MO.showToast(`Cidade iniciada com ${supName} e 1 Operário! Use Apoio/Vias abaixo para começar.`, '🏙️');
+        if (MO.showToast) MO.showToast(`🧭 Expedição de ${supName} chegou ao vale! Puxe uma estrada da Rodovia Regional (Oeste) para iniciar sua cidade.`, '🧭');
         return { supervisorName: supName, workers: state.workers.length, seed: state.seed };
     }
 
@@ -802,10 +1148,26 @@
                 z: w.rig && w.rig.group ? Math.round(w.rig.group.position.z * 100) / 100 : MO.STATION_TOOLBOX.z,
                 energy: Math.round((w.energy !== undefined ? w.energy : 100) * 10) / 10,
                 hydration: Math.round((w.hydration !== undefined ? w.hydration : 100) * 10) / 10,
-                hunger: Math.round((w.hunger !== undefined ? w.hunger : 100) * 10) / 10
+                hunger: Math.round((w.hunger !== undefined ? w.hunger : 100) * 10) / 10,
+                morale: Math.round((w.morale !== undefined ? w.morale : 85) * 10) / 10,
+                xp: Math.round(w.xp || 0),
+                level: w.level || 1,
+                tasksCompleted: w.tasksCompleted || 0,
+                trait: w.trait || 'dedicado',
+                memory: w.memory ? {
+                    builtLots: (w.memory.builtLots || []).slice(0, 8),
+                    homeLotId: w.memory.homeLotId || null,
+                    homeLabel: w.memory.homeLabel || '',
+                    recentEvents: (w.memory.recentEvents || []).slice(0, 5)
+                } : null
             })),
             regions: MO.regionManager ? MO.regionManager.serialize() : null,
-            constructions: MO.constructionManager ? MO.constructionManager.serialize() : null
+            constructions: MO.constructionManager ? MO.constructionManager.serialize() : null,
+            ecosystem: MO.chunkManager && MO.chunkManager.serializeModifications ? MO.chunkManager.serializeModifications() : null,
+            economyMeta: MO.economyManager && MO.economyManager.serialize ? MO.economyManager.serialize() : null,
+            forestry: MO.forestryManager && MO.forestryManager.serialize ? MO.forestryManager.serialize() : null,
+            mining: MO.miningManager && MO.miningManager.serialize ? MO.miningManager.serialize() : null,
+            farming: MO.farmingManager && MO.farmingManager.serialize ? MO.farmingManager.serialize() : null
         };
     }
 
@@ -861,7 +1223,23 @@
 
             const state = MO.state;
             if (snap.economy) Object.assign(state.economy, snap.economy);
+            if (snap.economyMeta && MO.economyManager && MO.economyManager.restore) {
+                MO.economyManager.restore(snap.economyMeta);
+            }
+            if (snap.forestry && MO.forestryManager && MO.forestryManager.restore) {
+                MO.forestryManager.restore(snap.forestry);
+            }
+            if (snap.mining && MO.miningManager && MO.miningManager.restore) {
+                MO.miningManager.restore(snap.mining);
+            }
+            if (snap.farming && MO.farmingManager && MO.farmingManager.restore) {
+                MO.farmingManager.restore(snap.farming);
+            }
             if (typeof snap.timeOfDay === 'number') state.timeOfDay = snap.timeOfDay;
+            if (snap.ecosystem && MO.chunkManager && MO.chunkManager.restoreModifications) {
+                MO.chunkManager.restoreModifications(snap.ecosystem);
+                MO.chunkManager.init({ preserveModifications: true });
+            }
 
             // Restaurar vias construídas e planejadas
             if (Array.isArray(snap.roadTiles)) {
@@ -958,6 +1336,15 @@
                         w.energy = ws.energy ?? 90;
                         w.hydration = ws.hydration ?? 90;
                         w.hunger = ws.hunger ?? 90;
+                        w.morale = ws.morale ?? 85;
+                        w.xp = ws.xp ?? 0;
+                        w.level = ws.level ?? 1;
+                        w.tasksCompleted = ws.tasksCompleted ?? 0;
+                        if (ws.trait && MO.PERSONALITY_TRAITS) {
+                            const tr = MO.PERSONALITY_TRAITS.find(t => t.id === ws.trait);
+                            if (tr) { w.trait = tr.id; w.traitLabel = tr.label; w.traitIcon = tr.icon; }
+                        }
+                        if (ws.memory) w.memory = { ...ws.memory };
                     }
                 });
                 MO.workerFactory.syncNpcUI();

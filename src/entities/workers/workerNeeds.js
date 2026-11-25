@@ -178,11 +178,25 @@
                 }
             }
 
-            // P2.2: Vida pós-construção — visitar/habitar casas concluídas e jardins
+            // Vida cotidiana: visitar o Mercado local para fazer compras / socializar
+            const builtMarket = state.city && Array.isArray(state.city.structures)
+                ? state.city.structures.find(st => st.kind === 'market' && st.built)
+                : null;
+            if (builtMarket && ((w.id + Math.floor(t || 0)) % 4 === 0)) {
+                w.task = { type: 'visit-market', cityStruct: builtMarket, duration: 1.85, subPhase: 'work' };
+                setDestinationFn(w, builtMarket.x + ((w.id % 2 === 0) ? -0.6 : 0.6), builtMarket.z + 1.15);
+                w.rig.setBadge('🛍️');
+                w.statusText = 'Visitando o Mercado da comunidade';
+                return true;
+            }
+
+            // P2.2 + Memória: visitar/habitar casas concluídas (preferindo a que o NPC ajudou a construir!)
             const completedList = MO.constructionManager ? MO.constructionManager.getCompletedConstructions() : [];
             const completedHouses = completedList.filter(c => c.mode === 'house');
             if (completedHouses.length > 0 && (w.specialty === 'resident' || w.specialty === 'gardener' || state.villageCompleted || (w.id % 2 === 0))) {
-                const houseRec = completedHouses[w.id % completedHouses.length];
+                const rememberedIds = (w.memory && Array.isArray(w.memory.builtLots)) ? w.memory.builtLots.map(b => b.lotId) : [];
+                const builtByMe = completedHouses.find(c => rememberedIds.includes(c.lotId));
+                const houseRec = builtByMe || completedHouses[w.id % completedHouses.length];
                 const lot = MO.regionManager ? MO.regionManager.getLot(houseRec.lotId) : null;
                 const hx = lot ? lot.originX : -4.4;
                 const hz = lot ? lot.originZ : -4.6;
@@ -198,7 +212,10 @@
                 w.task = { type: 'visit-home', duration: 2.1, subPhase: 'work' };
                 setDestinationFn(w, door.x, door.z + 0.35);
                 w.rig.setBadge('🏡');
-                w.statusText = state.isNight ? `Em casa (${lot ? lot.label : 'Vila'})` : `Descansando na varanda (${lot ? lot.label : 'Vila'})`;
+                const tag = builtByMe ? ' (construiu)' : '';
+                w.statusText = state.isNight
+                    ? `Em casa (${lot ? lot.label : 'Vila'}${tag})`
+                    : `Descansando na varanda (${lot ? lot.label : 'Vila'}${tag})`;
                 return true;
             }
 
@@ -256,8 +273,9 @@
             releaseCampReservations(w);
             return true;
         }
-        if (tk.type === 'shelter-rain' || tk.type === 'camp-hangout' || tk.type === 'social-chat' || tk.type === 'visit-home' || tk.type === 'tend-garden' || tk.type === 'stroll-bridge' || tk.type === 'assist-peer') {
+        if (tk.type === 'shelter-rain' || tk.type === 'camp-hangout' || tk.type === 'social-chat' || tk.type === 'visit-home' || tk.type === 'visit-market' || tk.type === 'tend-garden' || tk.type === 'stroll-bridge' || tk.type === 'stroll-village' || tk.type === 'assist-peer') {
             w.energy = Math.min(100, w.energy + 12);
+            w.morale = Math.min(100, (w.morale ?? 82) + 3);
             return true;
         }
         return false;

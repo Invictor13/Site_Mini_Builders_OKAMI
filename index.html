@@ -19,15 +19,28 @@
         👁️ Sair do Modo Zen (H)
     </button>
 
-    <!-- HEADER MINIMALISTA: APENAS RECURSOS NO CANTO SUPERIOR ESQUERDO -->
+    <!-- Pill discreta de Câmera de Acompanhamento de NPC -->
+    <button id="follow-npc-pill" onclick="stopFollowingWorker()" class="hidden fixed top-14 left-1/2 -translate-x-1/2 z-40 dock-surface px-3.5 py-1.5 rounded-full text-[11px] font-semibold text-sky-200 border border-sky-400/40 hover:text-white transition shadow-xl">
+        🎥 <span id="follow-npc-label">Seguindo NPC</span> · ✕ Soltar
+    </button>
+
+    <!-- HEADER MINIMALISTA: RECURSOS, SALDO, MORADORES & BOTÃO DE GESTÃO CONTEXTUAL -->
     <header class="hud-hideable fixed top-0 left-0 z-20 safe-top px-3 sm:px-4 pointer-events-none">
-        <div class="pointer-events-auto dock-surface dock-scroll rounded-xl px-2.5 py-1 flex items-center gap-1.5 max-w-[92vw]">
+        <div class="pointer-events-auto dock-surface dock-scroll rounded-xl px-2.5 py-1 flex items-center gap-1.5 max-w-[94vw]">
             <span class="text-[11px] px-1 text-amber-200" title="Madeira">🪵 <b id="eco-wood">24</b></span>
             <span class="text-[11px] px-1 text-slate-200" title="Pedra">🪨 <b id="eco-stone">20</b></span>
             <span class="text-[11px] px-1 text-sky-300" title="Ferro">⛓️ <b id="eco-iron">8</b></span>
             <span class="text-[11px] px-1 text-lime-300" title="Alimentos">🌾 <b id="eco-food">24</b></span>
             <span class="text-[11px] px-1 text-yellow-300" title="Moedas">🪙 <b id="eco-coins">60</b></span>
+            <span id="eco-net-cycle" class="text-[10px] font-semibold px-1 text-emerald-300" title="Saldo líquido por ciclo">+0/c</span>
+            <span class="hidden sm:inline text-[10px] px-1 text-indigo-200" title="Moradores / Capacidade">🏘️ <b id="eco-pop">0/0</b></span>
             <div class="w-px h-4 bg-white/10 shrink-0"></div>
+            <button id="btn-economy-panel" data-keep-active="true" onclick="toggleEconomyPanel(undefined, 'summary')" class="tool-btn px-2 py-0.5 rounded-lg border border-transparent text-[10px] font-semibold text-amber-200" title="Abrir Painel de Gestão & Contratos">
+                📊 Painel
+            </button>
+            <button id="btn-journal-top" data-keep-active="true" onclick="toggleJournalPanel()" class="tool-btn px-2 py-0.5 rounded-lg border border-transparent text-[10px] font-semibold text-sky-200" title="Abrir Diário da Cidade">
+                📖 Diário
+            </button>
             <button id="btn-sandbox-mode" data-keep-active="true" onclick="toggleSandboxMode()" class="tool-btn px-2 py-0.5 rounded-lg border border-transparent text-[10px] font-semibold text-cyan-200" title="Alternar Economia Real vs Modo Sandbox Livre">
                 <span id="sandbox-btn-label">Gestão</span>
             </button>
@@ -39,10 +52,48 @@
         </div>
     </header>
 
-    <!-- ÍCONE ISOLADO NO CANTO INFERIOR ESQUERDO: SOCIAL (LISTA DE TODOS OS NPCS) -->
+    <!-- PAINEL CONTEXTUAL DE GESTÃO DA CIDADE (Abas: Resumo, Contratos & Diário) -->
+    <aside id="economy-panel" class="hidden hud-hideable fixed top-14 left-3 sm:left-4 z-30 dock-surface rounded-2xl p-3.5 w-[345px] max-w-[92vw] max-h-[76vh] overflow-y-auto space-y-2.5 shadow-2xl border border-white/15">
+        <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span class="text-xs font-bold text-white">📊 Gestão & Diário da Cidade</span>
+            <button onclick="toggleEconomyPanel(false)" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
+        </div>
+        <div class="grid grid-cols-3 gap-1 text-[10px] font-semibold">
+            <button id="eco-tab-summary" onclick="setEconomyTab('summary')" class="tool-btn active py-1 rounded-lg border border-white/10 text-amber-200">📊 Resumo</button>
+            <button id="eco-tab-contracts" onclick="setEconomyTab('contracts')" class="tool-btn py-1 rounded-lg border border-white/10 text-emerald-200">📜 Contratos</button>
+            <button id="eco-tab-journal" onclick="setEconomyTab('journal')" class="tool-btn py-1 rounded-lg border border-white/10 text-sky-200">📖 Diário</button>
+        </div>
+        <div id="eco-view-summary" class="space-y-2.5">
+            <div id="economy-summary-cards" class="grid grid-cols-2 gap-1.5 text-[11px]"></div>
+            <div class="space-y-1.5 border-t border-white/10 pt-2">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">📦 Estoques & Capacidade</div>
+                <div id="economy-storage-bars" class="space-y-1.5 text-[11px]"></div>
+            </div>
+        </div>
+        <div id="eco-view-contracts" class="hidden space-y-1.5">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-amber-300">📜 Contratos de Construção</span>
+                <span id="economy-rep-badge" class="text-[10px] text-amber-200/80">Rep. 10</span>
+            </div>
+            <div id="economy-contracts-list" class="space-y-1.5 text-[11px]"></div>
+        </div>
+        <div id="eco-view-journal" class="hidden space-y-1.5">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-sky-300">📖 Diário da Cidade</span>
+                <span id="economy-journal-count" class="text-[10px] text-slate-400">0 eventos</span>
+            </div>
+            <div id="economy-journal-list" class="space-y-1.5 text-[11px] max-h-64 overflow-y-auto pr-0.5"></div>
+        </div>
+    </aside>
+
+    <!-- ÍCONES ISOLADOS NO CANTO INFERIOR ESQUERDO: SOCIAL (NPCS) + DIÁRIO DA CIDADE -->
     <button id="btn-npc-menu" data-keep-active="true" onclick="toggleNpcPanel()" class="hud-hideable fixed safe-bottom left-3 sm:left-4 z-30 dock-surface w-12 h-12 rounded-2xl flex flex-col items-center justify-center shadow-2xl border border-white/15 hover:scale-105 transition" title="Social · Ver todos os NPCs da cidade">
         <span class="text-lg leading-none">👥</span>
         <span id="npc-btn-label" class="text-[10px] font-bold text-amber-300 leading-none mt-0.5">2</span>
+    </button>
+    <button id="btn-journal-menu" data-keep-active="true" onclick="toggleJournalPanel()" class="hud-hideable fixed safe-bottom left-16 sm:left-[4.5rem] z-30 dock-surface w-12 h-12 rounded-2xl flex flex-col items-center justify-center shadow-2xl border border-sky-400/35 hover:scale-105 transition" title="Diário da Cidade · Histórico de construções e eventos">
+        <span class="text-lg leading-none">📖</span>
+        <span id="journal-btn-label" class="text-[10px] font-bold text-sky-300 leading-none mt-0.5">1</span>
     </button>
 
     <!-- Painel Social (Canto Inferior Esquerdo): Lista todos os NPCs do mapa -->
@@ -111,6 +162,9 @@
             <button onclick="toggleOptionsPanel(false)" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
         </div>
         <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+            <button id="btn-chillout-toggle" onclick="toggleChilloutMode()" class="tool-btn flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-indigo-400/30 font-medium text-indigo-200">
+                <span>🎧</span><span id="chillout-btn-label">Chillout</span>
+            </button>
             <button id="btn-screensaver" onclick="toggleScreensaverMode()" class="tool-btn flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-white/10 font-medium text-emerald-300">
                 <span>🌙</span><span id="screensaver-btn-label">Modo Relax</span>
             </button>
@@ -161,9 +215,27 @@
                 <button data-city-tool="tower" onclick="setCityBuildTool('tower')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium" title="Torre / Farol (4🪵 4🪨 5⛓️ 10🪙)">🗼 Torre</button>
             </div>
             <div data-cat-group="economy" class="hidden flex items-center gap-1">
-                <button data-city-tool="farm" onclick="setCityBuildTool('farm')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium text-lime-300" title="Produz comida contínua (3🪵 4🪙)">🌾 Fazenda</button>
-                <button data-city-tool="lumberyard" onclick="setCityBuildTool('lumberyard')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium text-amber-300" title="Beneficia madeira das árvores (2🪵 3🪙)">🪵 Serraria</button>
-                <button data-city-tool="market" onclick="setCityBuildTool('market')" class="tool-btn px-2.5 py-1 rounded-lg border border-transparent text-[11px] font-medium text-purple-300" title="Gera moedas com comerciante (4🪵 2🪨 6🪙)">🏪 Mercado</button>
+                <button data-city-tool="farm" onclick="setCityBuildTool('farm')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-lime-300" title="Fazenda clássica (3🪵 4🪙)">🌾 Fazenda</button>
+                <button data-city-tool="farm-plot" onclick="setCityBuildTool('farm-plot')" class="tool-btn px-2 py-1 rounded-lg border border-lime-500/30 text-[11px] font-medium text-emerald-300" title="Abre/expande bloco contíguo de lavoura (Grátis · até 12 blocos)">🌱 +Lavoura</button>
+                <button data-city-tool="farm-well" onclick="setCityBuildTool('farm-well')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-cyan-300" title="Poço d'Água em 3 etapas para irrigação (1🪵 2🪨)">🪣 Poço</button>
+                <button data-city-tool="farm-bench" onclick="setCityBuildTool('farm-bench')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-amber-200" title="Bancada de Triagem em 3 peças (2🪵 1🪙)">🧺 Triagem</button>
+                <button data-city-tool="farm-barn" onclick="setCityBuildTool('farm-barn')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-rose-300" title="Celeiro & Feira Agrícola com Silo (14 peças · 12 caixotes · 3🪵 2🪨 3🪙)">🏡 Celeiro</button>
+                <button data-city-tool="lumberyard" onclick="setCityBuildTool('lumberyard')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-amber-300" title="Serraria (2🪵 3🪙)">🪵 Serraria</button>
+                <button data-city-tool="woodshop" onclick="setCityBuildTool('woodshop')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-orange-300" title="Madeireira peça por peça (2🪵 2🪙)">🏪 Madeireira</button>
+                <button data-city-tool="crusher" onclick="setCityBuildTool('crusher')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-amber-200" title="Britador 3 peças (1🪵 2🪨 2🪙)">⚙️ Britador</button>
+                <button data-city-tool="mineral-depot" onclick="setCityBuildTool('mineral-depot')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-sky-300" title="Fundição 16 peças (2🪵 3🪨 3🪙)">🏛️ Fundição</button>
+                <button data-city-tool="market" onclick="setCityBuildTool('market')" class="tool-btn px-2 py-1 rounded-lg border border-transparent text-[11px] font-medium text-purple-300" title="Mercado (4🪵 2🪨 6🪙)">🏪 Mercado</button>
+                <div class="w-px h-4 bg-white/10 mx-0.5"></div>
+                <button onclick="markForestryReforest()" class="tool-btn px-2 py-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-[11px] font-medium text-emerald-300" title="Marca pontos na floresta para o Lenhador plantar mudas">🌱 Reflorestar</button>
+                <button id="btn-forestry-auto" onclick="toggleForestryAuto()" class="tool-btn active px-2 py-1 rounded-lg border border-amber-500/30 text-[11px] font-medium text-amber-200" title="Lenhador Auto/Manual">🪓 <span id="forestry-auto-label">Auto: ON</span></button>
+                <button id="btn-sell-woodshop" onclick="sellWoodshopDisplay()" disabled class="tool-btn opacity-40 px-2 py-1 rounded-lg border border-emerald-500/40 bg-emerald-600/20 text-[11px] font-semibold text-emerald-200" title="Vende lotes da Madeireira (+35% com Rodovia)">💰 <span id="woodshop-sell-label">Vender (0/12)</span></button>
+                <div class="w-px h-4 bg-white/10 mx-0.5"></div>
+                <button onclick="prospectMiningVeins()" class="tool-btn px-2 py-1 rounded-lg border border-sky-500/30 bg-sky-500/10 text-[11px] font-medium text-sky-300" title="Prospecta novos veios minerais">🧭 Prospectar</button>
+                <button id="btn-mining-auto" onclick="toggleMiningAuto()" class="tool-btn active px-2 py-1 rounded-lg border border-sky-500/30 text-[11px] font-medium text-sky-200" title="Minerador Auto/Manual">⛏️ <span id="mining-auto-label">Auto: ON</span></button>
+                <button id="btn-sell-minerals" onclick="sellMiningDisplay()" disabled class="tool-btn opacity-40 px-2 py-1 rounded-lg border border-amber-500/40 bg-amber-600/20 text-[11px] font-semibold text-amber-200" title="Vende lotes da Fundição (+35% com Rodovia)">💎 <span id="minerals-sell-label">Minérios (0/12)</span></button>
+                <div class="w-px h-4 bg-white/10 mx-0.5"></div>
+                <button id="btn-farming-auto" onclick="toggleFarmingAuto()" class="tool-btn active px-2 py-1 rounded-lg border border-lime-500/30 text-[11px] font-medium text-lime-200" title="Agricultor Auto/Manual">🌾 <span id="farming-auto-label">Auto: ON</span></button>
+                <button id="btn-sell-harvest" onclick="sellFarmingDisplay()" disabled class="tool-btn opacity-40 px-2 py-1 rounded-lg border border-lime-500/40 bg-lime-600/20 text-[11px] font-semibold text-lime-200" title="Vende caixotes da Feira Agrícola (+35% com Rodovia)">🧺 <span id="harvest-sell-label">Feira (0/12)</span></button>
             </div>
         </div>
 
@@ -177,28 +249,38 @@
         </nav>
     </div>
 
-    <!-- TELA INICIAL CINEMATOGRÁFICA (Cena 3D Viva ao Fundo) -->
-    <div id="city-setup-modal" class="fixed inset-0 z-50 bg-gradient-to-t from-slate-950/90 via-slate-950/35 to-slate-950/15 flex items-end sm:items-center justify-center p-4 sm:p-8">
-        <div class="dock-surface rounded-3xl p-5 sm:p-6 w-full max-w-lg space-y-4 border border-white/20 shadow-2xl">
+    <!-- TELA INICIAL CINEMATOGRÁFICA: CRÔNICA DOS PEREGRINOS (Cena 3D Viva ao Fundo) -->
+    <div id="city-setup-modal" class="fixed inset-0 z-50 bg-gradient-to-t from-slate-950/92 via-slate-950/40 to-slate-950/15 flex items-end sm:items-center justify-center p-4 sm:p-8">
+        <div class="dock-surface rounded-3xl p-5 sm:p-6 w-full max-w-lg space-y-4 border border-amber-300/25 shadow-2xl">
             <div class="flex items-start justify-between gap-3">
                 <div>
-                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-[10px] font-semibold text-emerald-200 mb-1.5">
-                        🌲 Vertical Slice · Bioma Floresta
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-[10px] font-semibold text-amber-200 mb-1.5">
+                        🧭 Crônica dos Pioneiros · Vale da Fronteira
                     </div>
                     <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-white">Mini Builders OKAMI</h1>
-                    <p class="text-xs text-slate-300 mt-0.5">Crie um mundo. Construa uma civilização.</p>
+                    <p class="text-xs text-slate-300 mt-0.5 leading-relaxed">Lidere peregrinos pela floresta selvagem, abra pistas da Rodovia Regional até o vale e erga uma civilização viva.</p>
                 </div>
                 <button onclick="document.getElementById('city-setup-modal').classList.add('hidden')" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded-lg hover:bg-white/10" title="Fechar e observar o mundo">✕</button>
             </div>
 
-            <!-- Visão Principal: 3 Ações Claras -->
+            <div class="grid grid-cols-3 gap-1.5 text-[10px] text-center bg-black/25 rounded-2xl p-2 border border-white/10">
+                <div class="text-slate-200"><div class="text-sm">🛣️</div><div class="font-semibold text-amber-200">Rodovia Oeste</div><div class="text-slate-400">Tráfego & entregas</div></div>
+                <div class="text-slate-200 border-x border-white/10"><div class="text-sm">⛺</div><div class="font-semibold text-emerald-200">Vale Fértil</div><div class="text-slate-400">Abrigo dos pioneiros</div></div>
+                <div class="text-slate-200"><div class="text-sm">🏔️</div><div class="font-semibold text-sky-200">Rio & Serra</div><div class="text-slate-400">Recursos naturais</div></div>
+            </div>
+
+            <!-- Visão Principal: Ações Claras (Expedição Manual + Modo Chillout Automático) -->
             <div id="title-home-view" class="space-y-2.5">
-                <button onclick="showTitleView('new')" class="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold tracking-wide transition shadow-lg flex items-center justify-between">
-                    <span>🌍 Nova Cidade</span>
-                    <span class="text-xs font-normal text-emerald-100">Criar mundo do zero →</span>
+                <button onclick="showTitleView('new')" class="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-600 to-emerald-600 hover:from-amber-500 hover:to-emerald-500 text-white text-sm font-bold tracking-wide transition shadow-lg flex items-center justify-between">
+                    <span>🧭 Nova Expedição</span>
+                    <span class="text-xs font-normal text-amber-50">Fundar cidade do zero →</span>
+                </button>
+                <button id="btn-start-chillout" onclick="startChilloutFromMenu()" class="w-full py-3 px-4 rounded-2xl bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold tracking-wide transition shadow-lg border border-indigo-300/30 flex items-center justify-between">
+                    <span>🎧 Modo Chillout</span>
+                    <span class="text-xs font-normal text-indigo-100">Peregrinos constroem tudo automaticamente ✨</span>
                 </button>
                 <button id="btn-continue-city" onclick="continueCityFromMenu()" class="w-full py-2.5 px-4 rounded-2xl bg-sky-600/80 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold transition flex items-center justify-between" disabled>
-                    <span>🏡 Continuar Cidade</span>
+                    <span>🏡 Continuar Jornada</span>
                     <span id="continue-city-meta" class="text-[11px] font-normal text-sky-100">Nenhuma cidade salva</span>
                 </button>
                 <button onclick="showTitleView('settings')" class="w-full py-2.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-slate-100 text-xs font-semibold transition flex items-center justify-between">
@@ -207,33 +289,33 @@
                 </button>
             </div>
 
-            <!-- Visão Nova Cidade: Nome + Cartões de Modo + Avançado Recolhível -->
+            <!-- Visão Nova Expedição: Líder dos Peregrinos + Cartões de Modo + Avançado Recolhível -->
             <div id="title-new-view" class="hidden space-y-3 text-xs">
                 <label class="block">
-                    <span class="text-slate-200 font-semibold">Nome do Supervisor</span>
-                    <input id="setup-sup-name" type="text" value="Supervisor Beto" maxlength="24" class="mt-1 w-full rounded-xl bg-slate-900/90 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
+                    <span class="text-slate-200 font-semibold">Nome do Líder dos Peregrinos</span>
+                    <input id="setup-sup-name" type="text" value="Pioneiro Beto" maxlength="24" class="mt-1 w-full rounded-xl bg-slate-900/90 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-amber-400" />
                 </label>
 
                 <div class="space-y-1">
-                    <span class="text-slate-200 font-semibold">Regras da Cidade</span>
+                    <span class="text-slate-200 font-semibold">Estilo da Expedição</span>
                     <div class="grid grid-cols-2 gap-2">
                         <button type="button" data-mode-card="real" onclick="selectSetupGameMode('real')" class="text-left p-2.5 rounded-xl border-2 border-emerald-400 bg-emerald-500/15 transition">
-                            <div class="font-bold text-white">💼 Gestão Real</div>
-                            <div class="text-[10px] text-slate-300 mt-0.5 leading-snug">Extraia da natureza, pague fretes no 📱 celular e gerencie moedas.</div>
+                            <div class="font-bold text-white">🧭 Expedição Real</div>
+                            <div class="text-[10px] text-slate-300 mt-0.5 leading-snug">Ligue a Rodovia ao vale, extraia da natureza, cumpra contratos e cresça.</div>
                         </button>
                         <button type="button" data-mode-card="sandbox" onclick="selectSetupGameMode('sandbox')" class="text-left p-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition">
-                            <div class="font-bold text-white">🎨 Sandbox Livre</div>
-                            <div class="text-[10px] text-slate-300 mt-0.5 leading-snug">Recursos infinitos para planejar e construir sem custos.</div>
+                            <div class="font-bold text-white">🎨 Construtor Livre</div>
+                            <div class="text-[10px] text-slate-300 mt-0.5 leading-snug">Recursos infinitos para planejar rodovias, bairros e monumentos sem custo.</div>
                         </button>
                     </div>
                     <input id="setup-sandbox" type="checkbox" class="hidden" />
                 </div>
 
                 <details class="rounded-xl bg-white/5 border border-white/10 px-3 py-2">
-                    <summary class="cursor-pointer font-semibold text-slate-200 select-none">🎛️ Opções Avançadas de Geração</summary>
+                    <summary class="cursor-pointer font-semibold text-slate-200 select-none">🎛️ Opções Avançadas do Território</summary>
                     <div class="grid grid-cols-2 gap-2.5 pt-2.5">
                         <label class="block">
-                            <span class="text-slate-300 font-medium">Seed do Mundo</span>
+                            <span class="text-slate-300 font-medium">Seed do Território</span>
                             <div class="mt-1 flex gap-1">
                                 <input id="setup-seed" type="number" value="4280" class="w-full rounded-xl bg-slate-900/90 border border-white/15 px-2.5 py-1.5 text-white" />
                                 <button type="button" onclick="document.getElementById('setup-seed').value = Math.floor(1000 + Math.random() * 8999)" class="px-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white">🎲</button>
@@ -242,7 +324,7 @@
                         <label class="block">
                             <span class="text-slate-300 font-medium">Bioma Inicial</span>
                             <select id="setup-biome" class="mt-1 w-full rounded-xl bg-slate-900/90 border border-white/15 px-2.5 py-1.5 text-white">
-                                <option value="forest" selected>🌲 Floresta (Principal)</option>
+                                <option value="forest" selected>🌲 Floresta da Fronteira</option>
                                 <option value="coast">🏖️ Litoral</option>
                                 <option value="cerrado">🌾 Cerrado</option>
                                 <option value="mountain">⛰️ Montanha</option>
@@ -253,8 +335,8 @@
 
                 <div class="flex items-center gap-2 pt-1">
                     <button type="button" onclick="showTitleView('home')" class="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold transition">← Voltar</button>
-                    <button type="button" onclick="startCityFromMenu()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold tracking-wide transition shadow-lg">
-                        🚀 Começar Cidade
+                    <button type="button" onclick="startCityFromMenu()" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-emerald-600 hover:from-amber-500 hover:to-emerald-500 text-white font-bold tracking-wide transition shadow-lg">
+                        ⛺ Iniciar Jornada dos Peregrinos
                     </button>
                 </div>
             </div>
@@ -530,10 +612,16 @@
     <script src="./src/world/terrain.js"></script>
     <script src="./src/world/mixer.js"></script>
     <script src="./src/world/workbench.js"></script>
+    <script src="./src/world/forestryManager.js"></script>
+    <script src="./src/world/miningManager.js"></script>
+    <script src="./src/world/farmingManager.js"></script>
     <script src="./src/world/regionManager.js"></script>
     <script src="./src/world/constructionManager.js"></script>
     <script src="./src/world/worldManager.js"></script>
+    <script src="./src/world/economyManager.js"></script>
     <script src="./src/world/cityManager.js"></script>
+    <script src="./src/world/trafficManager.js"></script>
+    <script src="./src/world/chilloutManager.js"></script>
     <script src="./src/entities/siteLogistics.js"></script>
     <script src="./src/modes/house/blueprint.js"></script>
     <script src="./src/modes/house/foundation.js"></script>

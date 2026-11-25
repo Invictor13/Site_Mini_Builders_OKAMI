@@ -835,16 +835,18 @@
             MO.waterSurfaceMesh.geometry.computeVertexNormals();
         }
 
-        // Atualiza partículas vivas ao vento pelo terreno
+        // Atualiza partículas vivas ao vento acompanhando a câmera no mundo infinito
         const windSpeed = state.weather === 'wind' ? 2.4 : 1.0;
         const raining = state.weather === 'rain';
+        const camX = (state.infiniteWorld && MO.camOrbit && MO.camOrbit.target) ? MO.camOrbit.target.x : 0;
+        const camZ = (state.infiniteWorld && MO.camOrbit && MO.camOrbit.target) ? MO.camOrbit.target.z : 0;
         state.site.ambientMotes.forEach((mt, idx) => {
             mt.mesh.visible = !raining && !state.isNight;
             if (!mt.mesh.visible) return;
             const drift = t * mt.speed * windSpeed + mt.phase;
-            mt.mesh.position.x = mt.baseX + Math.sin(drift) * 0.9;
+            mt.mesh.position.x = camX + mt.baseX + Math.sin(drift) * 0.9;
             mt.mesh.position.y = mt.baseY + Math.sin(drift * 1.4 + idx) * 0.22;
-            mt.mesh.position.z = mt.baseZ + Math.cos(drift * 0.8) * 0.9;
+            mt.mesh.position.z = camZ + mt.baseZ + Math.cos(drift * 0.8) * 0.9;
             mt.mesh.rotation.y += dt * 1.5;
         });
     };

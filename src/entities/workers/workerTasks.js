@@ -21,7 +21,22 @@
         if (tk.roadSeg) tk.roadSeg.res = false;
         if (tk.cityStruct) tk.cityStruct.res = false;
         if (tk.resourceNode) tk.resourceNode.res = false;
-        if (tk.type === 'saw-wood' && MO.state.workbench) MO.state.workbench.busyWorkerId = null;
+        if (tk.forestryTree) tk.forestryTree.res = false;
+        if (tk.forestryLog) tk.forestryLog.res = false;
+        if (tk.plantSpot) tk.plantSpot.res = false;
+        if (tk.miningRock) tk.miningRock.res = false;
+        if (tk.miningChunk) tk.miningChunk.res = false;
+        if (tk.farmPlot) tk.farmPlot.res = false;
+        if (tk.farmBundle) tk.farmBundle.res = false;
+        if (tk.type === 'process-crusher' && MO.miningManager && MO.miningManager.state.crusher) {
+            MO.miningManager.state.crusher.busyWorkerId = null;
+            MO.miningManager.animateCrusher(false, 0, null);
+        }
+        if (tk.type === 'pack-bench' && MO.farmingManager && MO.farmingManager.state.bench) {
+            MO.farmingManager.state.bench.busyWorkerId = null;
+            MO.farmingManager.animateBench(false, null);
+        }
+        if ((tk.type === 'saw-wood' || tk.type === 'craft-forestry-plank') && MO.state.workbench) MO.state.workbench.busyWorkerId = null;
         if (MO.state.villageInfra) {
             if (tk.type === 'build-unloading') MO.state.villageInfra.unloadingRes = false;
             if (tk.type === 'build-mixer') MO.state.villageInfra.mixerRes = false;
@@ -287,18 +302,40 @@
                 ? state.city.structures[state.city.structures.length - 1]
                 : null;
             const targetSpot = activeLot || lastStruct || MO.STATION_TOOLBOX || { x: -2.2, z: 2.0 };
-            w.task = { type: 'inspect-site', duration: 1.6, subPhase: 'work' };
-            setDest(w, targetSpot.x - 1.1, targetSpot.z + 1.4);
+            const surveyOffsets = [
+                { x: 3.5, z: 0.4, txt: 'Guiando peregrinos da Rodovia até a clareira do vale' },
+                { x: 8.2, z: -1.5, txt: 'Avaliando terreno fértil para erguer o primeiro abrigo' },
+                { x: 1.6, z: 2.6, txt: 'Traçando ponto de ligação com a Rodovia Regional' }
+            ];
+            const useSurvey = !activeLot && !lastStruct && !infra.unloadingPlaced && !infra.mixerPlaced && !infra.workbenchPlaced;
+            // Se há operário disponível próximo no início, faz briefing coordenado de equipe
+            const peer = (state.workers || []).find(o => o !== w && !o.sleepingInside && o.rig && o.rig.group);
+            if (useSurvey && peer && ((w._surveyStep || 0) % 3 === 2)) {
+                w._surveyStep = (w._surveyStep || 0) + 1;
+                w.task = { type: 'brief-crew', peer, duration: 1.5, subPhase: 'work' };
+                setDest(w, peer.rig.group.position.x + 0.85, peer.rig.group.position.z + 0.35);
+                setWorkerTool(w.rig, 'clipboard');
+                w.rig.setBadge('📋');
+                w.statusText = `Coordenando plano com ${peer.name}`;
+                return true;
+            }
+            const sIdx = (w._surveyStep || 0) % surveyOffsets.length;
+            w._surveyStep = sIdx + 1;
+            const offset = useSurvey ? surveyOffsets[sIdx] : { x: -1.1, z: 1.4, txt: null };
+            w.task = { type: 'inspect-site', duration: 1.65, subPhase: 'work' };
+            setDest(w, targetSpot.x + offset.x, targetSpot.z + offset.z);
             setWorkerTool(w.rig, 'clipboard');
             w.rig.setBadge('👷‍♂️');
-            if (!infra.unloadingBuilt) {
+            if (offset.txt) {
+                w.statusText = offset.txt;
+            } else if (!infra.unloadingBuilt) {
                 w.statusText = 'Aguardando Baia de Descarga (Apoio)';
             } else if (!infra.mixerBuilt) {
                 w.statusText = 'Aguardando Masseira (Apoio)';
             } else if (!infra.workbenchBuilt) {
                 w.statusText = 'Aguardando Bancada (Apoio)';
             } else {
-                w.statusText = 'Supervisionando obras da sua cidade';
+                w.statusText = 'Coordenando equipe e obras da cidade';
             }
             return true;
         }
@@ -413,50 +450,404 @@
         const state = MO.state;
         const pos = w.rig && w.rig.group ? w.rig.group.position : { x: 0, z: 0 };
 
-        if (w.role === 'lumberjack' || w.specialty === 'lumberjack') {
-            const trees = MO.chunkManager ? MO.chunkManager.getLoadedResourceNodes('wood').filter(n => !n.res) : [];
-            if (trees.length > 0) {
-                trees.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
-                const node = trees[0];
-                node.res = true;
-                w.task = { type: 'harvest-wood', resourceNode: node, duration: 1.15, subPhase: 'work' };
-                setDest(w, node.x, node.z + 0.65);
-                setWorkerTool(w.rig, 'hammer');
-                w.rig.setBadge('🪓');
-                w.statusText = 'Cortando madeira na floresta';
+        if (w.role === 'lumberjack' || w.specialty === 'lumberjack' || w.role === 'carpenter' || w.role === 'gardener') {
+            const fm = MO.forestryManager;
+            const fState = fm ? fm.state : null;
+
+            // 1. Se já carrega tora bruta ou peça serrada, completa imediatamente o fluxo Bancada -> Madeireira
+            if (fm && fState && w.forestryCarry === 'rawLog') {
+                const infra = state.villageInfra;
+                const sawmill = state.city && state.city.structures.find(st => st.kind === 'lumberyard' && st.built);
+                const craftPos = (infra && infra.workbenchBuilt && MO.STATION_WORKBENCH)
+                    ? { x: MO.STATION_WORKBENCH.x + 0.1, z: MO.STATION_WORKBENCH.z + 0.88, isWb: true }
+                    : (sawmill ? { x: sawmill.x, z: sawmill.z + 1.05, isWb: false } : null);
+                if (craftPos) {
+                    w.task = { type: 'craft-forestry-plank', useWorkbench: craftPos.isWb, duration: 1.15, subPhase: 'work' };
+                    setDest(w, craftPos.x, craftPos.z);
+                    setWorkerTool(w.rig, 'log');
+                    w.rig.setBadge('🪚');
+                    w.statusText = craftPos.isWb ? 'Levando tora para serrar na Bancada' : 'Levando tora para a Serraria';
+                    return true;
+                }
+                // Sem Bancada/Serraria ainda: entrega tora direto no estoque da cidade
+                w.forestryCarry = null;
+                if (MO.cityManager) MO.cityManager.addResources({ wood: 2 });
+            }
+
+            if (fm && fState && w.forestryCarry === 'craftedPiece') {
+                const ws = fState.woodshop;
+                if (ws.placed && !ws.completed) {
+                    const nextP = fm.getNextWoodshopPiece();
+                    if (nextP) {
+                        w.task = { type: 'build-woodshop-piece', piece: nextP, lookX: nextP.worldX, lookZ: nextP.worldZ, duration: 0.72, subPhase: 'work' };
+                        setDest(w, nextP.worldX + 0.72, nextP.worldZ + 0.72);
+                        setWorkerTool(w.rig, 'plank');
+                        w.rig.setBadge('🏪');
+                        w.statusText = `Montando Madeireira: ${nextP.name}`;
+                        return true;
+                    }
+                }
+                if (ws.placed && ws.completed && ws.displayedBundles.length < fm.MAX_DISPLAY_LOGS) {
+                    w.task = { type: 'deliver-woodshop-display', duration: 0.45, subPhase: 'work' };
+                    setDest(w, ws.x - 0.5, ws.z + 1.95);
+                    setWorkerTool(w.rig, 'plank');
+                    w.rig.setBadge('🪵');
+                    w.statusText = 'Expondo lote de madeira na Madeireira';
+                    return true;
+                }
+                // Sem Madeireira ou expositor cheio: estoca na bancada/cidade
+                w.forestryCarry = null;
+                if (MO.cityManager) MO.cityManager.addResources({ wood: 2 });
+            }
+
+            // 2. Fila de reflorestamento marcado com anéis verdes (ativa em Manual ou Auto)
+            if (fm && fState && fState.plantQueue.length > 0) {
+                const spot = fState.plantQueue.find(q => !q.res);
+                if (spot) {
+                    spot.res = true;
+                    w.task = { type: 'plant-sapling-spot', plantSpot: spot, duration: 0.85, subPhase: 'work' };
+                    setDest(w, spot.x, spot.z);
+                    setWorkerTool(w.rig, 'hoe');
+                    w.rig.setBadge('🌱');
+                    w.statusText = 'Plantando muda florestal marcada';
+                    return true;
+                }
+            }
+
+            // 3. Ciclo da Madeira (reflorestamento de tocos de chunks em contratos ambientais)
+            const reforestContract = Boolean(state.economy && Array.isArray(state.economy.activeContracts) && state.economy.activeContracts.includes('reforest-valley'));
+            const depletedTrees = (MO.chunkManager && MO.chunkManager.getDepletedTreeNodes) ? MO.chunkManager.getDepletedTreeNodes() : [];
+            if (depletedTrees.length > 0 && (w.role === 'gardener' || reforestContract || (depletedTrees.length >= 4 && ((w._replantTurn || 0) % 3 === 2)))) {
+                w._replantTurn = (w._replantTurn || 0) + 1;
+                const stump = depletedTrees[0];
+                w.task = { type: 'replant-tree', stumpId: stump.id, x: stump.x, z: stump.z, duration: 1.2, subPhase: 'work' };
+                setDest(w, stump.x, stump.z + 0.55);
+                setWorkerTool(w.rig, 'hoe');
+                w.rig.setBadge('🌱');
+                w.statusText = 'Replantando muda na floresta';
                 return true;
+            }
+
+            // 4. Fluxo físico completo do Lenhador Automático: Toras no chão -> Tocos -> Troncos caídos -> Árvores
+            if (fm && fState && fState.autoMode && (w.role === 'lumberjack' || w.specialty === 'lumberjack')) {
+                const availLog = fState.groundLogs.find(l => !l.picked && !l.res && l.grounded);
+                if (availLog) {
+                    availLog.res = true;
+                    w.task = { type: 'haul-log', forestryLog: availLog, duration: 0.35, subPhase: 'pickup' };
+                    setDest(w, availLog.x, availLog.z);
+                    setWorkerTool(w.rig, 'none');
+                    w.rig.setBadge('🪵');
+                    w.statusText = 'Recolhendo tora cortada no chão';
+                    return true;
+                }
+
+                const fallenTree = fState.trees.find(tr => tr.status === 'fallen' && !tr.res);
+                if (fallenTree) {
+                    fallenTree.res = true;
+                    const dirX = Math.sin(fallenTree.fallDirAngle);
+                    const dirZ = Math.cos(fallenTree.fallDirAngle);
+                    const midX = fallenTree.x + dirX * (fallenTree.trunkH * 0.45);
+                    const midZ = fallenTree.z + dirZ * (fallenTree.trunkH * 0.45);
+                    w.task = { type: 'buck-tree', forestryTree: fallenTree, lookX: midX, lookZ: midZ, duration: 1.25, subPhase: 'work' };
+                    setDest(w, midX - dirZ * 0.75, midZ + dirX * 0.75);
+                    setWorkerTool(w.rig, 'axe');
+                    w.rig.setBadge('🪓');
+                    w.statusText = 'Partindo tronco caído em 4 toras';
+                    return true;
+                }
+
+                const leftoverStump = fState.trees.find(tr => tr.status === 'bucked' && !tr.stumpRemoved && !tr.res);
+                if (leftoverStump) {
+                    leftoverStump.res = true;
+                    w.task = { type: 'remove-stump', forestryTree: leftoverStump, duration: 1.15, subPhase: 'work' };
+                    setDest(w, leftoverStump.x + 0.65, leftoverStump.z + 0.35);
+                    setWorkerTool(w.rig, 'axe');
+                    w.rig.setBadge('🧹');
+                    w.statusText = 'Destocando terreno florestal';
+                    return true;
+                }
+
+                const standingPhysical = fState.trees.find(tr => tr.status === 'standing' && !tr.res);
+                if (standingPhysical) {
+                    standingPhysical.res = true;
+                    w.task = { type: 'harvest-wood', forestryTree: standingPhysical, duration: 1.45, subPhase: 'work' };
+                    setDest(w, standingPhysical.x + 0.72, standingPhysical.z + 0.45);
+                    setWorkerTool(w.rig, 'axe');
+                    w.rig.setBadge('🪓');
+                    w.statusText = 'Derrubando árvore com machado';
+                    return true;
+                }
+            }
+
+            const sawmill = state.city && state.city.structures.find(st => st.kind === 'lumberyard' && st.built);
+            const ecoWood = state.economy ? state.economy.wood : 0;
+            // Se há Serraria construída e madeira em estoque suficiente (ou carpinteiro dedicado), beneficia toras em tábuas/receita!
+            if (sawmill && (w.role === 'carpenter' || (ecoWood >= 4 && ((w._sawTurn || 0) % 2 === 1)))) {
+                w._sawTurn = (w._sawTurn || 0) + 1;
+                w.task = { type: 'work-lumberyard', cityStruct: sawmill, duration: 1.35, subPhase: 'work' };
+                setDest(w, sawmill.x, sawmill.z + 1.05);
+                setWorkerTool(w.rig, 'saw');
+                w.rig.setBadge('🪚');
+                w.statusText = 'Beneficiando toras na Serraria';
+                return true;
+            }
+            if ((w.role === 'lumberjack' || w.specialty === 'lumberjack') && (!fState || fState.autoMode)) {
+                const trees = MO.chunkManager ? MO.chunkManager.getLoadedResourceNodes('wood').filter(n => !n.res) : [];
+                if (trees.length > 0) {
+                    w._sawTurn = (w._sawTurn || 0) + 1;
+                    w._replantTurn = (w._replantTurn || 0) + 1;
+                    trees.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
+                    const node = trees[0];
+                    node.res = true;
+                    w.task = { type: 'harvest-wood', resourceNode: node, duration: 1.45, subPhase: 'work' };
+                    setDest(w, node.x + 0.72, node.z + 0.45);
+                    setWorkerTool(w.rig, 'axe');
+                    w.rig.setBadge('🪓');
+                    w.statusText = 'Cortando árvore na floresta';
+                    return true;
+                }
             }
         }
 
         if (w.role === 'miner' || w.specialty === 'miner') {
-            const ores = MO.chunkManager
-                ? MO.chunkManager.getLoadedResourceNodes().filter(n => !n.res && (n.kind === 'mine' || n.kind === 'stone' || n.kind === 'iron'))
-                : [];
-            if (ores.length > 0) {
-                ores.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
-                const node = ores[0];
-                node.res = true;
-                w.task = { type: 'harvest-ore', resourceNode: node, duration: 1.25, subPhase: 'work' };
-                setDest(w, node.x, node.z + 0.75);
-                setWorkerTool(w.rig, 'hoe');
-                w.rig.setBadge('⛏️');
-                w.statusText = node.kind === 'mine'
-                    ? 'Minerando caverna natural'
-                    : (node.kind === 'iron' ? 'Minerando minério de ferro' : 'Extraindo pedra natural');
-                return true;
+            const mm = MO.miningManager;
+            const mState = mm ? mm.state : null;
+
+            // 1. Se já carrega pedra bruta, leva para montar ou processar no Britador
+            if (mm && mState && w.miningCarry === 'rawChunk') {
+                const cr = mState.crusher;
+                if (cr.placed && !cr.built) {
+                    const nextP = mm.getNextCrusherPiece();
+                    if (nextP) {
+                        w.task = { type: 'build-crusher-piece', piece: nextP, duration: 0.72, subPhase: 'work' };
+                        setDest(w, cr.x + 0.15, cr.z + 1.0);
+                        setWorkerTool(w.rig, 'chunk');
+                        w.rig.setBadge('⚙️');
+                        w.statusText = `Montando Britador: ${nextP.name}`;
+                        return true;
+                    }
+                }
+                if (cr.placed && cr.built && (cr.busyWorkerId === null || cr.busyWorkerId === w.id)) {
+                    cr.busyWorkerId = w.id;
+                    w.task = { type: 'process-crusher', duration: 1.15, subPhase: 'work' };
+                    setDest(w, cr.x + 0.15, cr.z + 1.0);
+                    setWorkerTool(w.rig, 'chunk');
+                    w.rig.setBadge('⚙️');
+                    w.statusText = 'Lapidando pedra na Serra Diamantada';
+                    return true;
+                }
+                // Sem Britador ainda: entrega direto ao estoque da cidade
+                const info = mm.ORE_TYPES[w.miningCarryOre] || mm.ORE_TYPES.granite;
+                w.miningCarry = null;
+                if (MO.cityManager) MO.cityManager.addResources({ stone: info.stoneGrant, iron: info.ironGrant });
             }
-            const mine = state.city && state.city.structures.find(st => st.kind === 'mine' && st.built);
-            if (mine) {
-                w.task = { type: 'harvest-ore', cityStruct: mine, duration: 1.3, subPhase: 'work' };
-                setDest(w, mine.x, mine.z + 1.0);
-                setWorkerTool(w.rig, 'hoe');
-                w.rig.setBadge('⛏️');
-                w.statusText = 'Trabalhando na mina da cidade';
-                return true;
+
+            // 2. Se já carrega bloco talhado / lingote, monta a Fundição ou expõe nos 12 slots
+            if (mm && mState && w.miningCarry === 'cutBlock') {
+                const dp = mState.depot;
+                if (dp.placed && !dp.completed) {
+                    const nextP = mm.getNextDepotPiece();
+                    if (nextP) {
+                        w.task = { type: 'build-depot-piece', piece: nextP, lookX: nextP.worldX, lookZ: nextP.worldZ, duration: 0.68, subPhase: 'work' };
+                        setDest(w, nextP.worldX + 0.75, nextP.worldZ + 0.75);
+                        setWorkerTool(w.rig, 'stone-block');
+                        w.rig.setBadge('🏛️');
+                        w.statusText = `Erguendo Fundição: ${nextP.name}`;
+                        return true;
+                    }
+                }
+                if (dp.placed && dp.completed && dp.displayedMinerals.length < mm.MAX_DISPLAY_ITEMS) {
+                    w.task = { type: 'deliver-depot-display', duration: 0.45, subPhase: 'work' };
+                    setDest(w, dp.x - 0.55, dp.z + 1.98);
+                    setWorkerTool(w.rig, 'stone-block');
+                    w.rig.setBadge('💎');
+                    w.statusText = 'Expondo minério na Fundição';
+                    return true;
+                }
+                w.miningCarry = null;
+                if (MO.cityManager) MO.cityManager.addResources({ stone: 2, iron: 1 });
+            }
+
+            // 3. Fluxo físico autônomo do Minerador: Pedaços no chão -> Entulho -> Rochas físicas -> Chunks
+            if (mm && mState && mState.autoMode) {
+                const freeChunk = mState.groundChunks.find(c => !c.picked && !c.res && c.grounded);
+                if (freeChunk) {
+                    freeChunk.res = true;
+                    w.task = { type: 'haul-chunk', miningChunk: freeChunk, duration: 0.35, subPhase: 'pickup' };
+                    setDest(w, freeChunk.x, freeChunk.z);
+                    setWorkerTool(w.rig, 'none');
+                    w.rig.setBadge('🪨');
+                    w.statusText = 'Recolhendo pedra fraturada';
+                    return true;
+                }
+
+                const rubble = mState.rocks.find(r => r.status === 'rubble' && !r.rubbleCleared && !r.res);
+                if (rubble) {
+                    rubble.res = true;
+                    w.task = { type: 'clear-rubble', miningRock: rubble, duration: 0.95, subPhase: 'work' };
+                    setDest(w, rubble.x + 0.72, rubble.z + 0.35);
+                    setWorkerTool(w.rig, 'hoe');
+                    w.rig.setBadge('🧹');
+                    w.statusText = 'Limpando entulho da pedreira';
+                    return true;
+                }
+
+                const intactPhys = mState.rocks.find(r => r.status === 'intact' && !r.res);
+                if (intactPhys) {
+                    intactPhys.res = true;
+                    w.task = { type: 'harvest-ore', miningRock: intactPhys, duration: 1.45, subPhase: 'work' };
+                    setDest(w, intactPhys.x + 0.95, intactPhys.z + 0.55);
+                    setWorkerTool(w.rig, 'pickaxe');
+                    w.rig.setBadge('⛏️');
+                    w.statusText = `Minerando ${(mm.ORE_TYPES[intactPhys.oreKey] || mm.ORE_TYPES.granite).name}`;
+                    return true;
+                }
+            }
+
+            if (!mState || mState.autoMode) {
+                const ores = MO.chunkManager
+                    ? MO.chunkManager.getLoadedResourceNodes().filter(n => !n.res && (n.kind === 'mine' || n.kind === 'stone' || n.kind === 'iron'))
+                    : [];
+                if (ores.length > 0) {
+                    ores.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
+                    const node = ores[0];
+                    node.res = true;
+                    w.task = { type: 'harvest-ore', resourceNode: node, duration: 1.40, subPhase: 'work' };
+                    setDest(w, node.x + 0.85, node.z + 0.55);
+                    setWorkerTool(w.rig, 'pickaxe');
+                    w.rig.setBadge('⛏️');
+                    w.statusText = node.kind === 'mine'
+                        ? 'Minerando caverna natural'
+                        : (node.kind === 'iron' ? 'Minerando minério de ferro' : 'Extraindo pedra natural');
+                    return true;
+                }
+                const mine = state.city && state.city.structures.find(st => st.kind === 'mine' && st.built);
+                if (mine) {
+                    w.task = { type: 'harvest-ore', cityStruct: mine, duration: 1.3, subPhase: 'work' };
+                    setDest(w, mine.x, mine.z + 1.0);
+                    setWorkerTool(w.rig, 'pickaxe');
+                    w.rig.setBadge('⛏️');
+                    w.statusText = 'Trabalhando na mina da cidade';
+                    return true;
+                }
             }
         }
 
         if (w.role === 'farmer' || w.specialty === 'farmer') {
+            const ag = MO.farmingManager;
+            const agState = ag ? ag.state : null;
+
+            // 1. Se já carrega cesto colhido, leva para montar ou embalar na Bancada de Triagem
+            if (ag && agState && w.farmingCarry === 'rawCrop') {
+                const bn = agState.bench;
+                if (bn.placed && !bn.built) {
+                    const nextP = ag.getNextBenchPiece();
+                    if (nextP) {
+                        w.task = { type: 'build-bench-piece', piece: nextP, duration: 0.72, subPhase: 'work' };
+                        setDest(w, bn.x + 0.15, bn.z + 1.0);
+                        setWorkerTool(w.rig, 'basket');
+                        w.rig.setBadge('🧺');
+                        w.statusText = `Montando Triagem: ${nextP.name}`;
+                        return true;
+                    }
+                }
+                if (bn.placed && bn.built && (bn.busyWorkerId === null || bn.busyWorkerId === w.id)) {
+                    bn.busyWorkerId = w.id;
+                    w.task = { type: 'pack-bench', duration: 1.05, subPhase: 'work' };
+                    setDest(w, bn.x + 0.15, bn.z + 1.0);
+                    setWorkerTool(w.rig, 'basket');
+                    w.rig.setBadge('🧺');
+                    w.statusText = 'Embalando colheita na Bancada de Triagem';
+                    return true;
+                }
+                const info = ag.CROP_CATALOG[w.farmingCarryCrop] || ag.CROP_CATALOG.wheat;
+                w.farmingCarry = null;
+                if (MO.cityManager) MO.cityManager.addResources({ food: info.foodGrant });
+            }
+
+            // 2. Se já carrega caixote embalado, ergue o Celeiro ou expõe na Feira
+            if (ag && agState && w.farmingCarry === 'packedCrate') {
+                const br = agState.barn;
+                if (br.placed && !br.completed) {
+                    const nextP = ag.getNextBarnPiece();
+                    if (nextP) {
+                        w.task = { type: 'build-barn-piece', piece: nextP, lookX: nextP.worldX, lookZ: nextP.worldZ, duration: 0.68, subPhase: 'work' };
+                        setDest(w, nextP.worldX + 0.75, nextP.worldZ + 0.75);
+                        setWorkerTool(w.rig, 'crate');
+                        w.rig.setBadge('🏡');
+                        w.statusText = `Erguendo Celeiro: ${nextP.name}`;
+                        return true;
+                    }
+                }
+                if (br.placed && br.completed && br.displayedCrates.length < ag.MAX_DISPLAY_CRATES) {
+                    w.task = { type: 'deliver-barn-display', duration: 0.45, subPhase: 'work' };
+                    setDest(w, br.x - 0.55, br.z + 1.98);
+                    setWorkerTool(w.rig, 'crate');
+                    w.rig.setBadge('🧺');
+                    w.statusText = 'Expondo caixote na Feira Agrícola';
+                    return true;
+                }
+                w.farmingCarry = null;
+                if (MO.cityManager) MO.cityManager.addResources({ food: 3 });
+            }
+
+            // 3. Fluxo autônomo da Lavoura Contígua: Cestos -> Poço -> Blocos da lavoura
+            if (ag && agState && agState.autoMode) {
+                const freeBundle = agState.harvestBundles.find(b => !b.picked && !b.res && b.grounded);
+                if (freeBundle) {
+                    freeBundle.res = true;
+                    w.task = { type: 'haul-harvest', farmBundle: freeBundle, duration: 0.35, subPhase: 'pickup' };
+                    setDest(w, freeBundle.x, freeBundle.z);
+                    setWorkerTool(w.rig, 'none');
+                    w.rig.setBadge('🧺');
+                    w.statusText = 'Recolhendo cesto da colheita';
+                    return true;
+                }
+
+                if (agState.well.placed && !agState.well.built) {
+                    w.task = { type: 'build-well-piece', duration: 0.80, subPhase: 'work' };
+                    setDest(w, agState.well.x, agState.well.z + 1.0);
+                    setWorkerTool(w.rig, 'hammer');
+                    w.rig.setBadge('🪣');
+                    w.statusText = 'Construindo Poço d\'Água';
+                    return true;
+                }
+
+                const priority = ['ripe', 'seeded', 'tilled', 'cleared', 'overgrown'];
+                for (let pIdx = 0; pIdx < priority.length; pIdx++) {
+                    const targetStatus = priority[pIdx];
+                    const candidates = agState.plots.filter(p => p.status === targetStatus && !p.res);
+                    if (candidates.length > 0) {
+                        candidates.sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
+                        const plot = candidates[0];
+                        if (targetStatus === 'seeded' && agState.well.built && !w.hasWaterInCan) {
+                            plot.res = true;
+                            w.task = { type: 'fetch-water', farmPlot: plot, duration: 0.65, subPhase: 'work' };
+                            setDest(w, agState.well.x, agState.well.z + 1.0);
+                            setWorkerTool(w.rig, 'can');
+                            w.rig.setBadge('💧');
+                            w.statusText = 'Enchendo regador no Poço';
+                            return true;
+                        }
+                        plot.res = true;
+                        const cfgMap = {
+                            overgrown: { type: 'farm-clear', tool: 'hoe', badge: '🌿', txt: 'Capinando lavoura' },
+                            cleared:   { type: 'farm-till',  tool: 'hoe', badge: '🚜', txt: 'Arando solo em sulcos' },
+                            tilled:    { type: 'farm-sow',   tool: 'none', badge: '🌱', txt: 'Semeando cultura' },
+                            seeded:    { type: 'farm-water', tool: 'can', badge: '💧', txt: 'Irrigando lavoura' },
+                            ripe:      { type: 'farm-harvest', tool: 'sickle', badge: '🌾', txt: 'Colhendo lavoura com foice' }
+                        };
+                        const cfg = cfgMap[targetStatus];
+                        w.task = { type: cfg.type, farmPlot: plot, duration: 0.85, subPhase: 'work' };
+                        setDest(w, plot.x, plot.z + 0.85);
+                        setWorkerTool(w.rig, cfg.tool);
+                        w.rig.setBadge(cfg.badge);
+                        w.statusText = cfg.txt;
+                        return true;
+                    }
+                }
+            }
+
             const farm = state.city && state.city.structures.find(st => st.kind === 'farm' && st.built);
             if (farm) {
                 w.task = { type: 'work-farm', cityStruct: farm, duration: 1.35, subPhase: 'work' };
@@ -545,6 +936,22 @@
 
         if (state.site.truckActive) {
             if (assignCampOrLifeTask(w, setDestination, setWorkerTool, t, false)) return;
+        }
+        if (isPlayerDriven && w.role !== 'supervisor' && !MO.constructionManager?.getActiveConstruction?.() && (!state.city || state.city.structures.length === 0)) {
+            const tb = MO.STATION_TOOLBOX || { x: -2.2, z: 2.0 };
+            const scoutPts = [
+                { x: tb.x + 2.2, z: tb.z + 0.6 },
+                { x: tb.x - 1.8, z: tb.z - 2.1 },
+                { x: tb.x + 1.4, z: tb.z - 1.6 }
+            ];
+            const sp = scoutPts[(w._scoutStep || 0) % scoutPts.length];
+            w._scoutStep = (w._scoutStep || 0) + 1;
+            w.task = { type: 'survey-area', duration: 1.75, subPhase: 'work' };
+            setDestination(w, sp.x, sp.z);
+            setWorkerTool(w.rig, 'clipboard');
+            w.rig.setBadge('📐');
+            w.statusText = 'Fazendo reconhecimento inicial do terreno';
+            return;
         }
         assignCampOrLifeTask(w, setDestination, setWorkerTool, t, true);
     }

@@ -329,21 +329,20 @@
         });
         if (!nearest) return null;
 
-        // BFS pelas vias construídas conectadas até a entrada mais distante da Baia
+        // BFS pelas vias construídas conectadas procurando entroncamento na Rodovia Regional
         const startKey = `${nearest.gx},${nearest.gz}`;
         const parent = new Map([[startKey, null]]);
         const queue = [nearest];
-        let farthest = nearest;
-        let maxDepth = 0;
-        const depthMap = new Map([[startKey, 0]]);
+        let highwayEntry = null;
+        const cm = MO.chunkManager;
+        const requireHighway = Boolean(state.infiniteWorld && state.cityMode && cm && cm.getHighwayCenterX);
 
         while (queue.length > 0) {
             const cur = queue.shift();
             const curKey = `${cur.gx},${cur.gz}`;
-            const curDepth = depthMap.get(curKey) || 0;
-            if (curDepth > maxDepth) {
-                maxDepth = curDepth;
-                farthest = cur;
+            if (requireHighway && !highwayEntry && cm.isNearHighway && cm.isNearHighway(cur.x, cur.z, 2.6, state.seed)) {
+                highwayEntry = cur;
+                break;
             }
             for (let dz = -1; dz <= 1; dz++) {
                 for (let dx = -1; dx <= 1; dx++) {
@@ -351,22 +350,40 @@
                     const nKey = `${cur.gx + dx},${cur.gz + dz}`;
                     if (!parent.has(nKey) && builtMap.has(nKey)) {
                         parent.set(nKey, curKey);
-                        depthMap.set(nKey, curDepth + 1);
                         queue.push(builtMap.get(nKey));
                     }
                 }
             }
         }
 
-        // Reconstrói de farthest -> nearest -> unloadPos
+        // Em Modo Cidade com Rodovia Regional: caminhão EXIGE pista construída conectando a Rodovia à Baia!
+        if (requireHighway && !highwayEntry) {
+            return null;
+        }
+
+        const entryNode = highwayEntry || nearest;
+        // Reconstrói de entryNode -> nearest -> unloadPos
         const roadWaypoints = [];
-        let traceKey = `${farthest.gx},${farthest.gz}`;
+        let traceKey = `${entryNode.gx},${entryNode.gz}`;
         while (traceKey) {
             const t = builtMap.get(traceKey);
             if (t) roadWaypoints.push({ x: t.x, z: t.z, kind: t.kind || 'dirt' });
             traceKey = parent.get(traceKey);
         }
-        if (roadWaypoints.length === 1) {
+
+        // Prefixa trecho vindo pela própria Rodovia Regional até o entroncamento construído pelo jogador!
+        if (requireHighway && highwayEntry && cm.getHighwayCenterX) {
+            const hwApproach = [];
+            for (let dz = -28; dz <= 0; dz += 7) {
+                const wz = highwayEntry.z + dz;
+                hwApproach.push({
+                    x: cm.getHighwayCenterX(wz, state.seed) + 1.05,
+                    z: wz,
+                    kind: 'paved'
+                });
+            }
+            roadWaypoints.unshift(...hwApproach);
+        } else if (roadWaypoints.length === 1) {
             const dxOut = roadWaypoints[0].x - unloadPos.x;
             const dzOut = roadWaypoints[0].z - unloadPos.z;
             const len = Math.hypot(dxOut, dzOut) || 1;
@@ -456,7 +473,7 @@
                 if (!infra || !infra.unloadingBuilt) {
                     MO.showToast('📱 Posicione e construa a Baia de Descarga (Apoio) primeiro!', '🚚');
                 } else if (playerDriven && computeRoadRouteToUnload(MO.STATION_UNLOAD) === null) {
-                    MO.showToast('🛣️ Conecte uma Estrada ou Rua até a Baia de Descarga para o caminhão entrar!', '🛣️');
+                    MO.showToast('🛣️ Construa uma estrada conectando a Rodovia Regional (Oeste) até a Baia de Descarga!', '🛣️');
                 } else {
                     MO.showToast('📱 Pedido agendado! Caminhão chegará assim que a estrada ficar pronta.', '🚚');
                 }
